@@ -1,0 +1,11 @@
+(define split
+  '(&& (= (txn1 closeremainderto) "Alice")
+       (= (txn1 receiver) "Alice")
+       (= (txn2 closeremainderto) "Bob")
+       (= (txn2 receiver) "Bob")
+       (< (txn1 fee) (/ (txn1 amount) 100))
+       (< (txn1 fee) (/ (txn2 amount) 100))
+       (> (txn1 amount) (/ (* (+ (txn1 amount) (txn2 amount)) 60) 100))
+       (< (txn1 amount) (/ (* (+ (txn1 amount) (txn2 amount)) 61) 100))
+       (> (txn2 amount) (/ (* (+ (txn1 amount) (txn2 amount)) 40) 100))
+       (< (txn2 amount) (/ (* (+ (txn1 amount) (txn2 amount)) 41) 100))))
