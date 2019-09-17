@@ -3,6 +3,7 @@
 (require racket/trace)
 
 (require "examples/atomicswap.rkt")
+(require "examples/split.rkt")
 
 (define [stealc prog]
   (string-join (stealc-lines (stealc-preprocess prog)) "\n"))
@@ -34,6 +35,7 @@
 (define [stealc-flatten prog lines]
   (if (list? lines)
       (cond [(eq? (first prog) 'txn) (stealc-flatten-txn lines)]
+            [(eq? (first prog) 'gtxn) (stealc-flatten-gtxn lines)]
             [(eq? (first prog) 'addr) (stealc-flatten-addr lines)]
             [(eq? (first prog) 'global) (stealc-flatten-global lines)]
             [(eq? (first prog) 'byte) (stealc-flatten-byte lines)]
@@ -52,6 +54,9 @@
 (define [stealc-flatten-byte lines]
   (list (string-join (list (third lines) (first lines) (second lines)) " ")))
 
+(define [stealc-flatten-gtxn lines]
+  (stealc-flatten-byte lines))
+
 (define [stealc-preprocess prog]
   (if (list? prog)
       (stealc-preprocess-expand prog)
@@ -69,6 +74,9 @@
         [(null? (rest (rest (rest prog)))) (list (first prog) (stealc-preprocess (second prog)) (stealc-preprocess (third prog)))]
         [else (cons (first prog) (cons (stealc-preprocess (second prog)) (list (map stealc-preprocess (cons (first prog) (rest (rest prog)))))))]))
 
-(println (stealc-preprocess atomicswap))
-
+(display "atomic swap\n:::::\n")
 (display (stealc atomicswap))
+(display "\n\n\n")
+(display "split\n:::::\n")
+(display (stealc split))
+
