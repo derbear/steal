@@ -1,8 +1,12 @@
+#lang racket
+
+(provide atomicswap)
+
 (define atomicswap
-  '(&& (< (txn fee) (/ (txn amount) 33))
-       (|| (&& (= (txn closeremainderto) "Alice")
-               (= (txn receiver) "Alice")
-               (= (sha256 arg0) "X"))
-           (&& (= (txn closeremainderto) "Bob")
-               (= (txn receiver) "Bob")
-               (> (round) 3000)))))
+  '(&& (< (txn Fee) (/ (txn Amount) 33))
+       (|| (&& (= (txn CloseRemainderTo) (addr "Alice"))
+               (= (txn Receiver) (addr "Alice"))
+               (= (hash arg0) (byte base64 "X")))
+           (&& (= (txn CloseRemainderTo) (addr "Bob"))
+               (= (txn Receiver) (addr "Bob"))
+               (> (global Round) 3000)))))
