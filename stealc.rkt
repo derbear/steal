@@ -4,9 +4,10 @@
 
 (require "examples/atomicswap.rkt")
 (require "examples/split.rkt")
+(require "examples/feeproxy.rkt")
 
 (define [stealc prog]
-  (string-join (stealc-lines (stealc-preprocess prog)) "\n"))
+  (string-join (map stealc-postprocess (stealc-lines (stealc-preprocess prog))) "\n"))
 
 (define [stealc-lines prog]
   (if (list? prog)
@@ -29,7 +30,7 @@
 
 (define [stealc-arg arg]
   (cond [(symbol? arg) (symbol->string arg)]
-        [(number? arg) (string-append "int " (number->string arg))]
+        [(number? arg) (number->string arg)]
         [else arg]))
 
 (define [stealc-flatten prog lines]
@@ -74,9 +75,22 @@
         [(null? (rest (rest (rest prog)))) (list (first prog) (stealc-preprocess (second prog)) (stealc-preprocess (third prog)))]
         [else (cons (first prog) (cons (stealc-preprocess (second prog)) (list (map stealc-preprocess (cons (first prog) (rest (rest prog)))))))]))
 
-(display "atomic swap\n:::::\n")
-(display (stealc atomicswap))
-(display "\n\n\n")
-(display "split\n:::::\n")
-(display (stealc split))
+(define [stealc-postprocess line]
+  (if (eq? (string->number line) #f)
+      line
+      (string-append "int " line)))
 
+(display "\n")
+(display "atomic swap\n:::::\n\n")
+(display (stealc atomicswap))
+(display "\n")
+
+(display "\n")
+(display "split\n:::::\n\n")
+(display (stealc split))
+(display "\n")
+
+(display "\n")
+(display "delegate keyreg\n:::::\n\n")
+(display (stealc feeproxykeyreg))
+(display "\n")
