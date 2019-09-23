@@ -1,11 +1,15 @@
+#lang racket
+
+(provide periodicpayment)
+
 (define periodicpayment
-  '(&& (= (txn closeremainderto) "Zero")
-       (= (txn receiver) "Alice")
-       (= (txn amount) 100,000)
-       (= (txn fee) 10,000)
-       (= (% (txn firstvalid) 100,000) 0)
+  '(&& (= (txn CloseRemainderTo) (global ZeroAddress))
+       (= (txn Receiver) (addr Alice))
+       (= (txn Amount) 100000)
+       (= (txn Fee) 10000)
+       (= (% (txn FirstValid) 100000) 0)
        ;; (&& (> (block time) "Tuesday") (< (block time) "Wednesday"))
-       (= (txn lastvalid) (+ 500 (txn firstvalid)))
+       (= (txn LastValid) (+ 500 (txn FirstValid)))
        ;; (&& (>= (protocol version) 3.0)
        ;;     (<= (protocol version) 3.4))
-       (= (len (txn note)) 0)))
+       (= (len (txn Note)) 0)))

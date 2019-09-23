@@ -1,17 +1,44 @@
-(define limitorder-ask
-  '(&& (= (gtxn 1 closeremainderto) "Alice")
-       (= (gtxn 1 receiver) "Alice")
-       (= (gtxn 2 closeremainderto) "Bob")
-       (= (gtxn 2 receiver) "Bob")
-       (< (gtxn 1 fee) 10,000)
-       (< (gtxn 2 fee) 10,000)
-       (< (* 3 (gtxn 1 amount)) (* 5 (gtxn-asset 2 "DerekCoin")))))
+#lang racket
 
-(define limitorder-bid
-  '(&& (= (gtxn 1 closeremainderto) "Alice")
-       (= (gtxn 1 receiver) "Alice")
-       (= (gtxn 2 closeremainderto) "Bob")
-       (= (gtxn 2 receiver) "Bob")
-       (< (gtxn 1 fee) 10,000)
-       (< (gtxn 2 fee) 10,000)
-       (> (* 2 (gtxn 1 amount)) (* 5 (gtxn-asset 2 "DerekCoin")))))
+(provide limitorder)
+(provide limitorder-fill)
+
+;; TODO add gtxn size
+
+;; Alice is looking for some Bob such that (5 * Bob's DerekCoin) > (2 * Alice's Algos)
+;; Alice is looking for a minimum sale of 10000 Algos
+(define limitorder
+  '(&& (= (gtxn 0 CloseRemainderTo) (addr Alice)) ;; erase remainder of account after exchange
+
+       (< (gtxn 0 Fee) 10000)
+       (< (gtxn 1 Fee) 10000)
+
+       ;; exchange Algos for DerekCoin
+       ;; (= (gtxn 0 Receiver) (addr Bob)) ; implicit
+       (= (gtxn 1 AssetReceiver) (addr Alice))
+       (= (gtxn 1 XferAsset) (byte base64 DerekCoin))
+       (= (gtxn 1 AssetSender) (global ZeroAddress))
+
+       (> (gtxn 0 Amount) 10000)
+       (< (* 2 (gtxn 0 Amount)) (* 5 (gtxn 1 AssetAmount)))))
+
+;; Bob is looking for some Alice such that (3 * Alice's Algos) > (5 * Bob's DerekCoin)
+;; Bob is looking for a minimum sale of 5000 DerekCoin
+(define limitorder-fill
+  '(&& (= (gtxn 1 AssetCloseTo) (addr Bob)) ;; refund leftover assets to Bob
+
+       ;; erase remainder of account after exchange
+       (= (gtxn 2 Receiver) (global ZeroAddress) (addr Bob))
+       (= (gtxn 2 CloseRemainderTo) (addr Bob))
+       
+       (< (gtxn 0 Fee) 10000)
+       (< (gtxn 1 Fee) 10000)
+
+       ;; exchange Algos for DerekCoin
+       (= (gtxn 0 Receiver) (addr Bob))
+       ;; (= (gtxn 1 AssetReceiver) (addr Alice)) ; implicit
+       (= (gtxn 1 XferAsset) (byte base64 DerekCoin))
+       (= (gtxn 1 AssetSender) (global ZeroAddress))
+
+       (> (gtxn 1 AssetAmount) 5000)
+       (> (* 3 (gtxn 0 Amount)) (* 5 (gtxn 1 AssetAmount)))))
