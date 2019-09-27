@@ -3,6 +3,8 @@
 (provide limitorder)
 (provide limitorder-fill)
 
+;; TODO specify txtypes in this script
+
 ;; This is delegate logic.
 ;; This is position 1 in a group txn.
 ;; Alice is looking for some Bob such that (5 * Bob's DerekCoin) > (2 * Alice's Algos)
@@ -10,6 +12,8 @@
 (define limitorder
   '(and (= (global GroupSize) 2)
         (= (gtxn 0 CloseRemainderTo) (addr Alice)) ;; erase remainder of account after exchange
+        (= (txn 0 TypeEnum) 1)
+        (= (txn 1 TypeEnum) 4)
 
         (< (gtxn 0 Fee) 10000)
         (< (gtxn 1 Fee) 10000)
@@ -30,6 +34,9 @@
 (define limitorder-fill
   '(and (= (global GroupSize) 3)
         (= (gtxn 1 AssetCloseTo) (addr Bob)) ;; refund leftover assets to Bob
+        (= (txn 0 TypeEnum) 1)
+        (= (txn 1 TypeEnum) 4)
+        (= (txn 2 TypeEnum) 1)
 
         ;; erase remainder of account after exchange
         (= (gtxn 2 Sender) (gtxn 1 Sender))
@@ -38,6 +45,7 @@
         
         (< (gtxn 0 Fee) 10000)
         (< (gtxn 1 Fee) 10000)
+        (< (gtxn 2 Fee) 10000)
 
         ;; exchange Algos for DerekCoin
         (= (gtxn 0 Receiver) (addr Bob))

@@ -5,7 +5,7 @@
 ;; This is delegate logic.
 ;; arg_0 must be the signature
 (define feeproxykeyreg
-  '(and (= (txn TypeEnum) 1)
+  '(and (= (txn TypeEnum) 2)
         (= (txn CloseRemainderTo) (global ZeroAddress))
         (= (txn Receiver) (global ZeroAddress))
         (= (txn Amount) 0)

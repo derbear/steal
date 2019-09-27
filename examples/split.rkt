@@ -2,12 +2,9 @@
 
 (provide split)
 
-;; TODO add gtxn size
-;; TODO add escape condition OR implement sender balance lookup
-
 (define split-core
   '(and (= (global GroupSize) 2)
-        (= (txn TypeEnum 0))
+        (= (txn TypeEnum 1))
         (= (gtxn 0 Sender) (gtxn 1 Sender))))
 
 (define split-transfer

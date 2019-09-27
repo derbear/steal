@@ -2,14 +2,12 @@
 
 (provide atomicswap)
 
-;; TODO specify txtype
-
 ;; This is an escrow.
 (define atomicswap
   '(and (< (txn Fee)
            (+ (global MinTxnFee)
               (/ (txn Amount) 100)))
-        (= (txn TypeEnum) 0)
+        (= (txn TypeEnum) 1)
         (or (and (= (txn CloseRemainderTo) (addr Alice))
                  (= (txn Receiver) (addr Alice))
                  (= (hash arg_0) (byte base64 Image)))

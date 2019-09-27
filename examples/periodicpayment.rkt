@@ -8,7 +8,7 @@
 ;; TODO consider asset counters...
 
 (define periodicpayment-core
-  '(and (= (txn TypeEnum) 0)
+  '(and (= (txn TypeEnum) 1)
         (< (txn Fee) (* 10 (global MinTxnFee)))
         (= (% (txn FirstValid) 100000) 0)
         (= (txn LastValid) (+ 500 (txn FirstValid)))
