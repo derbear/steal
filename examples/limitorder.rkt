@@ -3,10 +3,8 @@
 (provide limitorder)
 (provide limitorder-fill)
 
-;; TODO specify txtypes in this script
-
 ;; This is delegate logic.
-;; This is position 1 in a group txn.
+;; This is position 0 in a group txn.
 ;; Alice is looking for some Bob such that (5 * Bob's DerekCoin) > (2 * Alice's Algos)
 ;; Alice is looking for a minimum sale of 10000 Algos
 (define limitorder

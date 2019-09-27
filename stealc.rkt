@@ -76,9 +76,7 @@
 (define [stealc-preprocess-distribute prog]
   (cond [(null? (rest prog)) (rest prog)]
         [(null? (rest (rest (rest prog)))) (list (first prog) (stealc-preprocess (second prog)) (stealc-preprocess (third prog)))]
-        [else (cons (first prog) (cons (stealc-preprocess (second prog)) (list (map stealc-preprocess (cons (first prog) (rest (rest prog)))))))]))
-
-;; (trace stealc-preprocess-distribute)
+        [else (cons (first prog) (cons (stealc-preprocess (second prog)) (list (stealc-preprocess (cons (first prog) (rest (rest prog)))))))]))
 
 (define [stealc-postprocess line]
   (if (eq? (string->number line) #f)
