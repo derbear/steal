@@ -2,11 +2,8 @@
 
 (require racket/trace)
 
-(require "examples/atomicswap.rkt")
-(require "examples/split.rkt")
-(require "examples/feeproxy.rkt")
-(require "examples/periodicpayment.rkt")
-(require "examples/limitorder.rkt")
+(provide stealc)
+(provide stealc-bind)
 
 (define [stealc prog]
   (string-join (map stealc-postprocess (stealc-lines (stealc-preprocess prog))) "\n"))
@@ -28,6 +25,8 @@
 (define [stealc-op op]
   (cond [(eq? op '||) "||"]
         [(eq? op '=) "=="]
+        [(eq? op 'and) "&&"]
+        [(eq? op 'or) "||"]
         [else (symbol->string op)]))
 
 (define [stealc-arg arg]
@@ -70,6 +69,8 @@
       prog
       (cond [(eq? (first prog) '&&) (stealc-preprocess-distribute prog)]
             [(eq? (first prog) '||) (stealc-preprocess-distribute prog)]
+            [(eq? (first prog) 'and) (stealc-preprocess-distribute prog)]
+            [(eq? (first prog) 'or) (stealc-preprocess-distribute prog)]
             [else (cons (stealc-preprocess (first prog)) (map stealc-preprocess (rest prog)))])))
 
 (define [stealc-preprocess-distribute prog]
@@ -77,52 +78,20 @@
         [(null? (rest (rest (rest prog)))) (list (first prog) (stealc-preprocess (second prog)) (stealc-preprocess (third prog)))]
         [else (cons (first prog) (cons (stealc-preprocess (second prog)) (list (map stealc-preprocess (cons (first prog) (rest (rest prog)))))))]))
 
+;; (trace stealc-preprocess-distribute)
+
 (define [stealc-postprocess line]
   (if (eq? (string->number line) #f)
       line
       (string-append "int " line)))
 
-(define [stealc-template-populate prog args]
+(define [stealc-bind prog args]
   (if (and (list? prog) (not (null? prog)))
       (cond [(null? (first prog)) prog]
-            [(list? (first prog)) (cons (stealc-template-populate (first prog) args) (stealc-template-populate (rest prog) args))]
+            [(list? (first prog)) (cons (stealc-bind (first prog) args) (stealc-bind (rest prog) args))]
             [(symbol? (first prog))
              (if (assoc (first prog) args)
-                 (cons (second (assoc (first prog) args)) (stealc-template-populate (rest prog) args))
-                 (cons (first prog) (stealc-template-populate (rest prog) args)))]
+                 (cons (second (assoc (first prog) args)) (stealc-bind (rest prog) args))
+                 (cons (first prog) (stealc-bind (rest prog) args)))]
             [else prog])
       prog))
-
-(define args
-  '((Alice "YC3XWSU3EUISB6N4EOGW5NYEMDSSWPGPMN3ZOKD33UDKPNK2HIXYPFLVXQ")
-    (Bob "CVMUT7RKA3XBHQVVTGBV5EKC7M7ZSCHZMHQQ3MCOCWSKWBH7PVIQ43YGGY")
-    (hash sha256)
-    (Image "uFVEhjBpkpKQ8sZaau0qsDsf0eW3oXFEn1Ar5o39vkk=")
-    (DerekCoin "uFVEhjBpkpKQ8sZaau0qsDsf0eW3oXFEn1Ar5o39vkm4VUSGMGmSkg==")))
-
-
-;; (display "\n")
-;; (display "atomic swap\n:::::\n\n")
-;; (display (stealc (stealc-template-populate atomicswap args)))
-;; (display "\n")
-
-;; (display "\n")
-;; (display "split\n:::::\n\n")
-;; (display (stealc (stealc-template-populate split args)))
-;; (display "\n")
-
-;; (display "\n")
-;; (display "delegate keyreg\n:::::\n\n")
-;; (display (stealc (stealc-template-populate feeproxykeyreg args)))
-;; (display "\n")
-
-;; (display "\n")
-;; (display "periodic payment\n:::::\n\n")
-;; (display (stealc (stealc-template-populate periodicpayment args)))
-;; (display "\n")
-
-;; (display "\n")
-;; (display "limit order\n:::::\n\n")
-(display (stealc (stealc-template-populate limitorder-fill args)))
-;; (display "\n")
-
