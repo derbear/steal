@@ -4,7 +4,7 @@
 
 (define split-core
   '(and (= (global GroupSize) 2)
-        (= (txn TypeEnum 1))
+        (= (txn TypeEnum) 1)
         (= (gtxn 0 Sender) (gtxn 1 Sender))))
 
 (define split-transfer
