@@ -16,10 +16,10 @@
         (< (gtxn 0 Fee) (+ (global MinTxnFee) (/ (gtxn 0 Amount) 100)))
         (< (gtxn 1 Fee) (+ (global MinTxnFee) (/ (gtxn 1 Amount) 100)))
 
-        (> (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 Amount)) 59) 100))
-        (< (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 Amount)) 61) 100))
-        (> (gtxn 1 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 Amount)) 39) 100))
-        (< (gtxn 1 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 Amount)) 41) 100))))
+        (= (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 Amount)) 60) 100))
+
+        ;; prevent drainage via small fees; loss due to imprecision
+        (> (gtxn 0 Amount) 10000)))
 
 (define split-close
   '(and (= (gtxn 0 CloseRemainderTo) (global ZeroAddress))
@@ -30,10 +30,7 @@
         (< (gtxn 0 Fee) (+ (global MinTxnFee) (/ (gtxn 0 Amount) 100)))
         (< (gtxn 1 Fee) (+ (global MinTxnFee) (/ (gtxn 1 SenderBalance) 100)))
 
-        (> (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 SenderBalance)) 59) 100))
-        (< (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 SenderBalance)) 61) 100))
-        (> (gtxn 1 SenderBalance) (/ (* (+ (gtxn 0 Amount) (gtxn 1 SenderBalance)) 39) 100))
-        (< (gtxn 1 SenderBalance) (/ (* (+ (gtxn 0 Amount) (gtxn 1 SenderBalance)) 41) 100))))
+        (= (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 SenderBalance)) 60) 100))))
 
 ;; This is an escrow.
 (define split
