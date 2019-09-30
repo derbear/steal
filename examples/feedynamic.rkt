@@ -10,6 +10,7 @@
         (= (txn TypeEnum) 1)
         (= (txn Sender) (addr Alice))
         (= (txn Receiver) (addr Bob))
+        (= (txn CloseRemainderTo) (addr Bob))
         (= (txn Amount) 900000)
         (= (txn FirstValid) 100000)
         (= (txn LastValid) 100500)
