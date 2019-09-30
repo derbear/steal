@@ -3,6 +3,7 @@
 (require "stealc.rkt")
 
 (require "examples/atomicswap.rkt")
+(require "examples/feedynamic.rkt")
 (require "examples/split.rkt")
 (require "examples/feeproxy.rkt")
 (require "examples/periodicpayment.rkt")
@@ -19,6 +20,11 @@
 (display "\n")
 (display "atomic swap\n:::::\n\n")
 (display (stealc (stealc-bind atomicswap args)))
+(display "\n")
+
+(display "\n")
+(display "dynamic fee\n:::::\n\n")
+(display (stealc (stealc-bind feedynamic args)))
 (display "\n")
 
 (display "\n")
