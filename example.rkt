@@ -48,11 +48,6 @@
 (display "\n")
 
 (display "\n")
-(display "periodic payment\n:::::\n\n")
-(display (stealc (stealc-bind periodicpayment args)))
-(display "\n")
-
-(display "\n")
 (display "limit order\n:::::\n\n")
 (display (stealc (stealc-bind limitorder args)))
 (display "\n")
