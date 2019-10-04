@@ -4,13 +4,11 @@
 
 ;; This is an escrow.
 (define atomicswap
-  '(and (< (txn Fee)
-           (+ (global MinTxnFee)
-              (/ (txn Amount) 100)))
+  '(and (< (txn Fee) TMPL_FEE)
         (= (txn TypeEnum) 1)
-        (or (and (= (txn CloseRemainderTo) (addr Alice))
-                 (= (txn Receiver) (addr Alice))
-                 (= (hash arg_0) (byte base64 Image)))
-            (and (= (txn CloseRemainderTo) (addr Bob))
-                 (= (txn Receiver) (addr Bob))
-                 (> (global Round) 3000)))))
+        (or (and (= (txn CloseRemainderTo) (global ZeroAddress))
+                 (= (txn Receiver) (addr TMPL_RCV))
+                 (= (TMPL_HASHFN arg_0) (byte base64 TMPL_HASHIMG)))
+            (and (= (txn CloseRemainderTo) (global ZeroAddress))
+                 (= (txn Receiver) (addr TMPL_ESC))
+                 (> (txn FirstValid) TMPL_TIMEOUT)))))

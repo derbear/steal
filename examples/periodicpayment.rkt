@@ -7,22 +7,24 @@
 
 ;; TODO consider asset counters...
 
+;; TODO substitute with SenderBalance deprecation
+
 (define periodicpayment-core
   '(and (= (txn TypeEnum) 1)
-        (< (txn Fee) (* 10 (global MinTxnFee)))
-        (= (% (txn FirstValid) 100000) 0)
-        (= (txn LastValid) (+ 500 (txn FirstValid)))
-        (= (txn Lease) (byte base32 PERIODICPAYMENT))))
+        (< (txn Fee) TMPL_FEE)
+        (= (% (txn FirstValid) TMPL_PERIOD) 0)
+        (= (txn LastValid) (+ TMPL_DUR (txn FirstValid)))
+        (= (txn Lease) (byte base32 TMPL_X))))
 
 (define periodicpayment-transfer
   '(and (= (txn CloseRemainderTo) (global ZeroAddress))
-        (= (txn Receiver) (addr Alice))
-        (= (txn Amount) 100000)))
+        (= (txn Receiver) (addr TMPL_RCV))
+        (= (txn Amount) TMPL_AMT)))
 
 (define periodicpayment-close
-  '(and (= (txn CloseRemainderTo) (addr Alice))
+  '(and (= (txn CloseRemainderTo) (addr TMPL_RCV))
         (= (txn Receiver) (global ZeroAddress))
-        (< (txn SenderBalance) 100000)
+        (< (txn SenderBalance) TMPL_AMT)
         (= (txn Amount) 0)))
 
 ;; This is delegate logic.
