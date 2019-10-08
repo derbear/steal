@@ -41,6 +41,7 @@
             [(eq? (first prog) 'addr) (stealc-flatten-addr lines)]
             [(eq? (first prog) 'global) (stealc-flatten-global lines)]
             [(eq? (first prog) 'byte) (stealc-flatten-byte lines)]
+            [(eq? (first prog) 'int) (stealc-flatten-int lines)]
             [else lines])
       lines))
 
@@ -51,6 +52,9 @@
   (stealc-flatten-txn lines))
 
 (define [stealc-flatten-global lines]
+  (stealc-flatten-txn lines))
+
+(define [stealc-flatten-int lines]
   (stealc-flatten-txn lines))
 
 (define [stealc-flatten-byte lines]

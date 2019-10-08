@@ -15,13 +15,13 @@
         (= (gtxn 1 CloseRemainderTo) (global ZeroAddress))
         (= (gtxn 1 Receiver) (addr TMPL_RCV2))
 
-        (< (gtxn 0 Fee) TMPL_FEE)
-        (< (gtxn 1 Fee) TMPL_FEE)
+        (< (gtxn 0 Fee) (int TMPL_FEE))
+        (< (gtxn 1 Fee) (int TMPL_FEE))
 
-        (= (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 Amount)) TMPL_RATN) TMPL_RATD))
+        (= (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 Amount)) (int TMPL_RATN)) (int TMPL_RATD)))
 
         ;; prevent drainage via small fees; loss due to imprecision
-        (> (gtxn 0 Amount) TMPL_MINPAY)))
+        (> (gtxn 0 Amount) (int TMPL_MINPAY))))
 
 (define split-close
   '(and (= (gtxn 0 CloseRemainderTo) (global ZeroAddress))
@@ -29,10 +29,10 @@
         (= (gtxn 1 CloseRemainderTo) (addr TMPL_RCV2))
         (= (gtxn 1 Receiver) (global ZeroAddress))
 
-        (< (gtxn 0 Fee) TMPL_FEE)
-        (< (gtxn 1 Fee) TMPL_FEE)
+        (< (gtxn 0 Fee) (int TMPL_FEE))
+        (< (gtxn 1 Fee) (int TMPL_FEE))
 
-        (= (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 SenderBalance)) TMPL_RATN) TMPL_RATD))))
+        (= (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 SenderBalance)) (int TMPL_RATN)) (int TMPL_RATD)))))
 
 ;; This is an escrow.
 (define split
