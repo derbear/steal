@@ -16,5 +16,5 @@
         (= (txn Receiver) (global ZeroAddress)
         (or (and (= (txn CloseRemainderTo) (addr TMPL_RCV))
                  (= (TMPL_HASHFN arg_0) (byte base64 TMPL_HASHIMG)))
-            (and (= (txn CloseRemainderTo) (addr TMPL_own))
+            (and (= (txn CloseRemainderTo) (addr TMPL_OWN))
                  (> (txn FirstValid) (int TMPL_TIMEOUT)))))))

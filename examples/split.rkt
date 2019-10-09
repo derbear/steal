@@ -25,6 +25,7 @@
 (define split-close
   '(and (= (txn CloseRemainderTo) (addr TMPL_OWN))
         (= (txn Receiver) (global ZeroAddress))
+        (< (txn Fee) (int TMPL_FEE))
         (> (txn FirstValid) (int TMPL_TIMEOUT))))
 
 ;; Splits money sent to some account to two recipients at some ratio.

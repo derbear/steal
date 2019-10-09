@@ -1,7 +1,7 @@
 #lang racket
 
 (provide limitorder)
-(provide limitorder-fill)
+;; (provide limitorder-fill)
 
 ;; Implements a limit order for an asset, given Algos.
 ;; This is an escrow.
