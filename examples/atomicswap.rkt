@@ -2,13 +2,19 @@
 
 (provide atomicswap)
 
+;; Implements an atomic swap.
 ;; This is an escrow.
+;;
+;; The receiver must be omitted.
+;;
+;; Money is released under two circumstances:
+;; 1. To TMPL_RCV if TMPL_HASHFN(arg_0) = TMPL_HASHIMG
+;; 2. To TMPL_OWN if txn.FirstValid > TMPL_TIMEOUT
 (define atomicswap
   '(and (< (txn Fee) (int TMPL_FEE))
         (= (txn TypeEnum) 1)
-        (or (and (= (txn CloseRemainderTo) (global ZeroAddress))
-                 (= (txn Receiver) (addr TMPL_RCV))
+        (= (txn Receiver) (global ZeroAddress)
+        (or (and (= (txn CloseRemainderTo) (addr TMPL_RCV))
                  (= (TMPL_HASHFN arg_0) (byte base64 TMPL_HASHIMG)))
-            (and (= (txn CloseRemainderTo) (global ZeroAddress))
-                 (= (txn Receiver) (addr TMPL_ESC))
-                 (> (txn FirstValid) (int TMPL_TIMEOUT))))))
+            (and (= (txn CloseRemainderTo) (addr TMPL_own))
+                 (> (txn FirstValid) (int TMPL_TIMEOUT)))))))

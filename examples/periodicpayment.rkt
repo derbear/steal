@@ -1,13 +1,7 @@
 #lang racket
 
-(require racket/pretty)
-
 (provide periodicpayment)
 (provide periodicpayment-escrow)
-
-;; TODO consider asset counters...
-
-;; TODO substitute with SenderBalance deprecation
 
 (define periodicpayment-core
   '(and (= (txn TypeEnum) 1)
@@ -24,15 +18,28 @@
 (define periodicpayment-close
   '(and (= (txn CloseRemainderTo) (addr TMPL_RCV))
         (= (txn Receiver) (global ZeroAddress))
-        (< (txn SenderBalance) (int TMPL_AMT))
+        (> (txn FirstValid) (int TMPL_TIMEOUT))
         (= (txn Amount) 0)))
 
+;; Allows the periodic withdrawal of funds to some account.
 ;; This is delegate logic.
+;;
+;; This allows TMPL_RCV to withdraw TMPL_AMT every
+;; TMPL_PERIOD rounds for TMPL_DUR after every multiple
+;; of TMPL_PERIOD.
 (define periodicpayment
   `(and ,periodicpayment-core
         ,periodicpayment-transfer))
 
+;; Allows the periodic withdrawal of funds to some account.
 ;; This is an escrow.
+;;
+;; This allows TMPL_RCV to withdraw TMPL_AMT every
+;; TMPL_PERIOD rounds for TMPL_DUR after every multiple
+;; of TMPL_PERIOD.
+;;
+;; After TMPL_TIMEOUT, all remaining funds in the escrow
+;; are available to TMPL_RCV.
 (define periodicpayment-escrow
   `(and ,periodicpayment-core
         (or ,periodicpayment-transfer

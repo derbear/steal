@@ -2,8 +2,18 @@
 
 (provide feeproxykeyreg)
 
+;; Creates a delegate key solely with the authority to
+;; register participation keys.
 ;; This is delegate logic.
-;; arg_0 must be the signature
+;;
+;; TMPL_AUTH specifies the delegate public key.  For the
+;; transaction to be valid, arg_0 must contain the signature
+;; of the private key corresponding to TMPL_AUTH on the
+;; key registration transaction.
+;;
+;; This allows the delegate key to spend TMPL_FEE every
+;; TMPL_PERIOD rounds for TMPL_DUR after every multiple
+;; of TMPL_PERIOD.
 (define feeproxykeyreg
   '(and (= (txn TypeEnum) 2)
         (= (txn CloseRemainderTo) (global ZeroAddress))
