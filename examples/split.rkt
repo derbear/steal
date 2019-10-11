@@ -3,19 +3,16 @@
 (provide split)
 
 (define split-core
-  '(= (txn TypeEnum) 1))
+  '(and (= (txn TypeEnum) 1)
+        (< (txn Fee) (int TMPL_FEE))))
 
 (define split-transfer
-  '(and (= (global GroupSize) 2)
-        (= (gtxn 0 Sender) (gtxn 1 Sender))
+  '(and (= (gtxn 0 Sender) (gtxn 1 Sender))
 
-        (= (gtxn 0 CloseRemainderTo) (global ZeroAddress))
+        (= (txn CloseRemainderTo) (global ZeroAddress))
+
         (= (gtxn 0 Receiver) (addr TMPL_RCV1))
-        (= (gtxn 1 CloseRemainderTo) (global ZeroAddress))
         (= (gtxn 1 Receiver) (addr TMPL_RCV2))
-
-        (< (gtxn 0 Fee) (int TMPL_FEE))
-        (< (gtxn 1 Fee) (int TMPL_FEE))
 
         (= (gtxn 0 Amount) (/ (* (+ (gtxn 0 Amount) (gtxn 1 Amount)) (int TMPL_RATN)) (int TMPL_RATD)))
 
@@ -25,7 +22,6 @@
 (define split-close
   '(and (= (txn CloseRemainderTo) (addr TMPL_OWN))
         (= (txn Receiver) (global ZeroAddress))
-        (< (txn Fee) (int TMPL_FEE))
         (> (txn FirstValid) (int TMPL_TIMEOUT))))
 
 ;; Splits money sent to some account to two recipients at some ratio.
@@ -42,5 +38,6 @@
 ;; After TMPL_TIMEOUT passes, all funds can be refunded to TMPL_OWN.
 (define split
   `(and ,split-core
-        (or ,split-transfer
+        (if (= (global GroupSize) 2)
+            ,split-transfer
             ,split-close)))

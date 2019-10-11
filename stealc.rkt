@@ -10,10 +10,32 @@
 
 (define [stealc-lines prog]
   (if (list? prog)
-      (let [(lines (append (stealc-lines-recur (rest prog))
-                          (list (stealc-op (first prog)))))]
-        (stealc-flatten prog lines))
+      (stealc-lines-special prog)
       (list (stealc-arg prog))))
+
+(define next-label-number 0)
+(define (gen-label!)
+  (let [(num next-label-number)]
+    (set! next-label-number (+ 1 next-label-number))
+    (string-append "label" (number->string num))))
+
+(define [stealc-lines-special prog]
+  (cond [(eq? (first prog) 'if)
+         (let [(then-entry (gen-label!))
+               (otherwise-entry (gen-label!))]
+           (append (stealc-lines (second prog)) ; test body
+                   (list (string-append "bnz " then-entry))
+                   (stealc-lines (fourth prog)) ; else body
+                   (list "int 1")
+                   (list (string-append "bnz " otherwise-entry))
+                   (list (string-append "pop // check bug workaround"))
+                   (list (string-append then-entry ":"))
+                   (stealc-lines (third prog)) ; then body
+                   (list (string-append otherwise-entry ":"))))]
+        [else
+         (let [(lines (append (stealc-lines-recur (rest prog))
+                              (list (stealc-op (first prog)))))]
+           (stealc-flatten prog lines))]))
 
 (define [stealc-lines-recur prog]
   (cond [(null? prog) prog]

@@ -30,8 +30,8 @@
     ["periodic-payment-escrow" ,periodicpayment-escrow]
     ["split" ,split]
     ["delegate-key-registration" ,feeproxykeyreg]
-    ["limit-order" ,limitorder]
-    ["limit-order-fill" ,limitorder-fill]))
+    ["limit-order" ,limitorder]))
+    ;; ["limit-order-fill" ,limitorder-fill]))
 
 (define template-ext ".teal.tmpl")
 
