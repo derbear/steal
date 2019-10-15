@@ -21,26 +21,26 @@
   '(and (= (gtxn 0 TypeEnum) 1)
         (< (gtxn 0 Fee) (int TMPL_FEE))
         (= (gtxn 0 CloseRemainderTo) (addr TMPL_OWN))
-        
-        (or (and (= (global GroupSize) 1)
-                 ;; Escrow |-> TMPL_OWN
-                 (> (gtxn 0 FirstValid) (int TMPL_TIMEOUT))
+        (< (global GroupSize) 3)
+
+        (if (= (global GroupSize) 1)
+            ;; Escrow |-> TMPL_OWN
+            (and (> (gtxn 0 FirstValid) (int TMPL_TIMEOUT))
                  (= (gtxn 0 Receiver) (global ZeroAddress)))
 
-            (and (= (global GroupSize) 2)
+            ;; gtxn 0
+            ;; Escrow -> *: >TMPL_MINTRD Algos
+            ;; Escrow |-> TMPL_OWN
+            ;;
+            ;; gtxn 1
+            ;; * -> TMPL_OWN: >(ratio * TMPL_ASSET)
+            (and (> (gtxn 0 Amount) (int TMPL_MINTRD))
 
-                 ;; gtxn 0
-                 ;; Escrow -> *: >TMPL_MINTRD Algos
-                 ;; Escrow |-> TMPL_OWN
-                 (> (gtxn 0 Amount) (int TMPL_MINTRD))
-
-                 ;; gtxn 1
-                 ;; * -> TMPL_OWN: >(ratio * TMPL_ASSET)
                  (= (gtxn 1 TypeEnum) 4)
-                 (= (gtxn 1 XferAsset) (byte base64 TMPL_ASSET))
+                 (= (gtxn 1 XferAsset) (int TMPL_ASSET))
                  (= (gtxn 1 AssetReceiver) (addr TMPL_OWN))
                  (= (gtxn 1 AssetSender) (global ZeroAddress))
-                 (< (* TMPL_RATN (gtxn 0 Amount)) (* TMPL_RATD (gtxn 1 AssetAmount)))))))
+                 (< (* (int TMPL_SWAPN) (gtxn 0 Amount)) (* (int TMPL_SWAPD) (gtxn 1 AssetAmount)))))))
 
 ;; ;; This is an escrow.
 ;; ;; This is position 1 and 2 in a group txn.
@@ -63,7 +63,7 @@
 ;;         ;; Escrow -> *: >5000 DerekCoin
 ;;         ;; Escrow |-> Bob (DerekCoin)
 ;;         (= (gtxn 1 TypeEnum) 4)
-;;         (= (gtxn 1 XferAsset) (byte base64 TMPL_ASSET))
+;;         (= (gtxn 1 XferAsset) (int TMPL_ASSET))
 ;;         (= (gtxn 1 AssetSender) (global ZeroAddress))
 ;;         (> (gtxn 1 AssetAmount) (int TMPL_MINTRD))
 ;;         (= (gtxn 1 AssetCloseTo) (addr TMPL_OWN)) ;; refund leftover assets to Bob
