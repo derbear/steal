@@ -28,10 +28,11 @@
     (TMPL_DUR 500)
     (TMPL_PERIOD 10000)
     (TMPL_TIMEOUT 300000)
+    (TMPL_EXPIRE 300000)
     (TMPL_HASHFN sha256)
     (TMPL_X "uFVEhjBpkpKQ8sZaau0qsDsf0eW3oXFEn1Ar5o39vkk=")
     (TMPL_HASHIMG "uFVEhjBpkpKQ8sZaau0qsDsf0eW3oXFEn1Ar5o39vkk=")
-    (TMPL_ASSET "uFVEhjBpkpKQ8sZaau0qsDsf0eW3oXFEn1Ar5o39vkm4VUSGMGmSkg==")))
+    (TMPL_ASSET 42)))
 
 (display "\n")
 (display "atomic swap\n:::::\n\n")
@@ -61,6 +62,11 @@
 (display "\n")
 (display "delegate keyreg\n:::::\n\n")
 (display (stealc (stealc-bind feeproxykeyreg args)))
+(display "\n")
+
+(display "\n")
+(display "delegate keyreg (revocable)\n:::::\n\n")
+(display (stealc (stealc-bind feeproxykeyreg-revocable args)))
 (display "\n")
 
 (display "\n")

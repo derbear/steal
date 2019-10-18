@@ -30,6 +30,7 @@
     ["periodic-payment-escrow" ,periodicpayment-escrow]
     ["split" ,split]
     ["delegate-key-registration" ,feeproxykeyreg]
+    ["delegate-key-registration-revocable" ,feeproxykeyreg-revocable]
     ["limit-order" ,limitorder]))
     ;; ["limit-order-fill" ,limitorder-fill]))
 
