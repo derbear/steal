@@ -18,15 +18,17 @@
 ;;
 ;; After TMPL_TIMEOUT passes, all funds can be refunded to TMPL_OWN.
 (define limitorder
-  '(and (= (gtxn 0 TypeEnum) 1)
-        (< (gtxn 0 Fee) (int TMPL_FEE))
-        (= (gtxn 0 CloseRemainderTo) (addr TMPL_OWN))
+  '(and (= (global GroupIndex) 0)
+        (= (txn TypeEnum) 1)
+        (< (txn Fee) (int TMPL_FEE))
+        (= (txn CloseRemainderTo) (addr TMPL_OWN))
         (< (global GroupSize) 3)
 
         (if (= (global GroupSize) 1)
             ;; Escrow |-> TMPL_OWN
-            (and (> (gtxn 0 FirstValid) (int TMPL_TIMEOUT))
-                 (= (gtxn 0 Receiver) (global ZeroAddress)))
+            (and (> (txn FirstValid) (int TMPL_TIMEOUT))
+                 (= (txn Receiver) (global ZeroAddress))
+                 (= (txn Amount) 0))
 
             ;; gtxn 0
             ;; Escrow -> *: >TMPL_MINTRD Algos
@@ -34,13 +36,13 @@
             ;;
             ;; gtxn 1
             ;; * -> TMPL_OWN: >(ratio * TMPL_ASSET)
-            (and (> (gtxn 0 Amount) (int TMPL_MINTRD))
+            (and (> (txn Amount) (int TMPL_MINTRD))
 
                  (= (gtxn 1 TypeEnum) 4)
                  (= (gtxn 1 XferAsset) (int TMPL_ASSET))
                  (= (gtxn 1 AssetReceiver) (addr TMPL_OWN))
                  (= (gtxn 1 AssetSender) (global ZeroAddress))
-                 (< (* (int TMPL_SWAPN) (gtxn 0 Amount)) (* (int TMPL_SWAPD) (gtxn 1 AssetAmount)))))))
+                 (< (* (int TMPL_SWAPN) (txn Amount)) (* (int TMPL_SWAPD) (gtxn 1 AssetAmount)))))))
 
 ;; ;; This is an escrow.
 ;; ;; This is position 1 and 2 in a group txn.

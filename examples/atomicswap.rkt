@@ -14,6 +14,7 @@
   '(and (< (txn Fee) (int TMPL_FEE))
         (= (txn TypeEnum) 1)
         (= (txn Receiver) (global ZeroAddress))
+        (= (txn Amount) 0)
         (or (and (= (txn CloseRemainderTo) (addr TMPL_RCV))
                  (= (TMPL_HASHFN arg_0) (byte base64 TMPL_HASHIMG)))
             (and (= (txn CloseRemainderTo) (addr TMPL_OWN))
