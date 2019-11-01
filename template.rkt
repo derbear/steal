@@ -24,7 +24,7 @@
   (make-directory (dirname)))
 
 (define (comment-out str)
-  (string-join (map (lambda (s) (string-append "// " s))
+  (string-join (map (lambda (s) (if (string=? s "") "//" (string-append "// " s)))
                     (string-split str "\n"))
                "\n"))
 
@@ -48,6 +48,6 @@
                 (build-path (dirname) (string-append fname template-ext))
                 #:exists 'truncate
                 (lambda (out)
-                  (display (comment-out template-doc) out)
+                  (displayln (comment-out template-doc) out)
                   (display (stealc template-data) out)))))
             templates)
