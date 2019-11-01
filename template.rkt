@@ -23,24 +23,31 @@
 (with-handlers ([exn:fail:filesystem:exists? log-exn])
   (make-directory (dirname)))
 
+(define (comment-out str)
+  (string-join (map (lambda (s) (string-append "// " s))
+                    (string-split str "\n"))
+               "\n"))
+
 (define templates
-  `(["atomic-swap" ,atomicswap]
-    ["dynamic-fee" ,feedynamic]
-    ["periodic-payment" ,periodicpayment]
-    ["periodic-payment-escrow" ,periodicpayment-escrow]
-    ["split" ,split]
-    ["delegate-key-registration" ,feeproxykeyreg]
-    ["delegate-key-registration-revocable" ,feeproxykeyreg-revocable]
-    ["limit-order" ,limitorder]))
+  `(["atomic-swap" ,atomicswap ,atomicswap-doc]
+    ["dynamic-fee" ,feedynamic ,feedynamic-doc]
+    ;; ["periodic-payment" ,periodicpayment]
+    ["periodic-payment-escrow" ,periodicpayment-escrow ,periodicpayment-escrow-doc]
+    ["split" ,split ,split-doc]
+    ["delegate-key-registration" ,feeproxykeyreg ,feeproxykeyreg-doc]
+    ["limit-order" ,limitorder ,limitorder-doc]))
     ;; ["limit-order-fill" ,limitorder-fill]))
 
 (define template-ext ".teal.tmpl")
 
 (for-each (lambda (x)
             (let ([fname (first x)]
-                  [template-data (second x)])
+                  [template-data (second x)]
+                  [template-doc (third x)])
               (call-with-output-file
                 (build-path (dirname) (string-append fname template-ext))
                 #:exists 'truncate
-                (lambda (out) (display (stealc template-data) out)))))
+                (lambda (out)
+                  (display (comment-out template-doc) out)
+                  (display (stealc template-data) out)))))
             templates)

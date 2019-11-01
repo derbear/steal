@@ -1,22 +1,35 @@
 #lang racket
 
 (provide limitorder)
+(provide limitorder-doc)
 ;; (provide limitorder-fill)
 
-;; Implements a limit order for an asset, given Algos.
-;; This is an escrow.
-;;
-;; This allows either a two-transaction group, for executing the
-;; trade, or single transaction, for closing the position.
-;;
-;; Let ratio = TMPL_RATN / TMPL_RATD.
-;;
-;; Filling the order requires a group transaction of size two.
-;; More than TMPL_MINTRD can be sent to any address, and more
-;; than ratio * TMPL_MINTRD can be sent to TMPL_OWN. All remaining
-;; funds are refunded to TMPL_OWN.
-;;
-;; After TMPL_TIMEOUT passes, all funds can be refunded to TMPL_OWN.
+(define limitorder-doc
+"Implements a limit order for an asset, given Algos.
+This is a contract account.
+
+This allows either a two-transaction group, for executing the
+trade, or single transaction, for closing the position.
+
+Let ratio = TMPL_SWAPN / TMPL_SWAPD.
+
+Filling the order requires a group transaction of size two.
+More than TMPL_MINTRD can be sent to any address, and more
+than ratio * TMPL_MINTRD can be sent to TMPL_OWN. All remaining
+funds are refunded to TMPL_OWN.
+
+After TMPL_TIMEOUT passes, all funds can be refunded to TMPL_OWN.
+
+Parameters:
+ - TMPL_ASSET: ID of the transferred asset
+ - TMPL_SWAPN: exchange rate (for N algos, want rate * N coin): numerator,
+ - TMPL_SWAPD: exchange rate (for N algos, want rate * N coin): denominator
+ - TMPL_TIMEOUT: the round at which the account expires
+ - TMPL_OWN: the address to refund funds to on timeout
+ - TMPL_FEE: maximum fee used by the limit order transaction
+ - TMPL_MINTRD: the minimum amount (of Algos) to be traded away
+")
+
 (define limitorder
   '(and (= (global GroupIndex) 0)
         (= (txn TypeEnum) 1)

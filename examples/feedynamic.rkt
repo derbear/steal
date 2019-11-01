@@ -1,29 +1,41 @@
 #lang racket
 
 (provide feedynamic)
+(provide feedynamic-doc)
 
-;; Implements a payment transaction with an undetermined fee.
-;; This is delegate logic.
-;;
-;; This must be present on the first of two transactions.
-;;
-;; The first transaction must be from this account.
-;; The Lease is mandatory!
-;;
-;; The second transaction must send money to this account.
-;; It must send an amount equal to txn.Fee.
+(define feedynamic-doc
+"Implements a payment transaction with an undetermined fee.
+This is delegate logic.
+
+This must be present on the first of two transactions.
+
+The first transaction should send money to this account.
+It must send an amount equal to txn.Fee.
+
+The second transaction should be from this account.
+TMPL_LEASE is mandatory!
+
+Parameters:
+ - TMPL_TO: the payment receiver
+ - TMPL_CLS: the account to close the payment to
+ - TMPL_AMT: the amount of the payment
+ - TMPL_FV: the first valid round of the transaction
+ - TMPL_LV: the last valid round of the transaction
+ - TMPL_LEASE: string to use for the transaction lease
+")
+
 (define feedynamic
   '(and (= (global GroupSize) 2)
 
-        (= (txn GroupIndex) 0)
+        (= (gtxn 0 TypeEnum) 1)
+        (= (gtxn 0 Receiver) (txn Sender))
+        (= (gtxn 0 Amount) (txn Fee))
+
+        (= (txn GroupIndex) 1)
         (= (txn TypeEnum) 1)
-        (= (txn Receiver) (addr TMPL_RCV))
+        (= (txn Receiver) (addr TMPL_TO))
         (= (txn CloseRemainderTo) (addr TMPL_CLS))
         (= (txn Amount) (int TMPL_AMT))
         (= (txn FirstValid) (int TMPL_FV))
         (= (txn LastValid) (int TMPL_LV))
-        (= (txn Lease) (byte base64 TMPL_X))
-
-        (= (gtxn 1 TypeEnum) 1)
-        (= (gtxn 1 Receiver) (txn Sender))
-        (= (gtxn 1 Amount) (txn Fee))))
+        (= (txn Lease) (byte base64 TMPL_LEASE))))
