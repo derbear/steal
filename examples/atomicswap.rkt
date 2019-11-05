@@ -15,7 +15,7 @@ Money is released under two circumstances:
 
 Parameters:
  - TMPL_RCV: the address to send funds to when the preimage is supplied
- - TMPL_HASHFN (choice: sha256, keccak256): the specific hash function to apply
+ - TMPL_HASHFN: the specific hash function (either sha256 or keccak256) to apply
  - TMPL_HASHIMG: the image of the hash function
  - TMPL_TIMEOUT: the round at which the account expires
  - TMPL_OWN: the address to refund funds to on timeout

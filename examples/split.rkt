@@ -43,8 +43,8 @@ After TMPL_TIMEOUT passes, all funds can be refunded to TMPL_OWN.
 Parameters:
  - TMPL_RCV1: the first recipient in the split account
  - TMPL_RCV2: the second recipient in the split account
- - TMPL_RATN: fraction of money to be paid to the first recipient: numerator
- - TMPL_RATD: fraction of money to be paid to the first recipient: denominator
+ - TMPL_RATN: fraction of money to be paid to the first recipient (numerator)
+ - TMPL_RATD: fraction of money to be paid to the first recipient (denominator)
  - TMPL_MINPAY: minimum amount to be paid out of the account
  - TMPL_TIMEOUT: the round at which the account expires
  - TMPL_OWN: the address to refund funds to on timeout

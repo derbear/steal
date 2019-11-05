@@ -22,8 +22,8 @@ After TMPL_TIMEOUT passes, all funds can be refunded to TMPL_OWN.
 
 Parameters:
  - TMPL_ASSET: ID of the transferred asset
- - TMPL_SWAPN: exchange rate (for N algos, want rate * N coin): numerator,
- - TMPL_SWAPD: exchange rate (for N algos, want rate * N coin): denominator
+ - TMPL_SWAPN: exchange rate (for N algos, want rate * N coin) (numerator)
+ - TMPL_SWAPD: exchange rate (for N algos, want rate * N coin) (denominator)
  - TMPL_TIMEOUT: the round at which the account expires
  - TMPL_OWN: the address to refund funds to on timeout
  - TMPL_FEE: maximum fee used by the limit order transaction

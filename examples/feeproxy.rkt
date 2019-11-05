@@ -20,6 +20,7 @@ of TMPL_PERIOD.
 
 Parameters:
  - TMPL_AUTH: key authorized with delegation authority
+ - TMPL_EXPIRE: round at which key expires
  - TMPL_PERIOD: time between a pair of allowed registration periods
  - TMPL_DUR: duration of an allowed registration period
  - TMPL_LEASE: string to use for the transaction lease
