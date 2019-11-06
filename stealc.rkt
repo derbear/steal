@@ -28,7 +28,6 @@
                    (stealc-lines (fourth prog)) ; else body
                    (list "int 1")
                    (list (string-append "bnz " otherwise-entry))
-                   (list (string-append "pop // check bug workaround"))
                    (list (string-append then-entry ":"))
                    (stealc-lines (third prog)) ; then body
                    (list (string-append otherwise-entry ":"))))]
@@ -102,7 +101,10 @@
 (define [stealc-preprocess-distribute prog]
   (cond [(null? (rest prog)) (rest prog)]
         [(null? (rest (rest (rest prog)))) (list (first prog) (stealc-preprocess (second prog)) (stealc-preprocess (third prog)))]
-        [else (cons (first prog) (cons (stealc-preprocess (second prog)) (list (stealc-preprocess (cons (first prog) (rest (rest prog)))))))]))
+        [else (let [(expr (dq prog))]
+                (list (first prog)
+                      (stealc-preprocess (second expr))
+                      (stealc-preprocess (first expr))))]))
 
 (define [stealc-postprocess line]
   (if (eq? (string->number line) #f)
@@ -119,3 +121,7 @@
                  (cons (first prog) (stealc-bind (rest prog) args)))]
             [else prog])
       prog))
+
+(define [dq l]
+  (let [(lrev (reverse l))]
+    (list (first lrev) (reverse (rest lrev)))))

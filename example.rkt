@@ -64,10 +64,10 @@
 (display (stealc (stealc-bind feeproxykeyreg args)))
 (display "\n")
 
-(display "\n")
-(display "delegate keyreg (revocable)\n:::::\n\n")
-(display (stealc (stealc-bind feeproxykeyreg-revocable args)))
-(display "\n")
+;; (display "\n")
+;; (display "delegate keyreg (revocable)\n:::::\n\n")
+;; (display (stealc (stealc-bind feeproxykeyreg-revocable args)))
+;; (display "\n")
 
 (display "\n")
 (display "limit order\n:::::\n\n")
