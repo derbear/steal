@@ -31,7 +31,7 @@ Parameters:
 ")
 
 (define limitorder
-  '(and (= (global GroupIndex) 0)
+  '(and (= (txn GroupIndex) 0)
         (= (txn TypeEnum) 1)
         (< (txn Fee) (int TMPL_FEE))
         (= (txn CloseRemainderTo) (addr TMPL_OWN))
