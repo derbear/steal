@@ -118,15 +118,21 @@
           (map (app-compile-var-updates #f params args accs (maybe-second (assoc 'lvars-of ast))) (maybe-rest (maybe-rest (assoc 'lvars-of ast))))
           '(1)))
 
-;; TODO enforce that these numbers are distinct
-(define asset-create 0)
-(define asset-delete 1)
-(define asset-reconfigure 2)
-(define asset-open 3)
-(define asset-freeze 4)
-(define asset-transfer 5)
-(define asset-clawback 6)
-(define asset-close 7)
+(define asset-enum 0)
+(define (asset-enum-next!)
+  (begin
+    (let ([c asset-enum])
+      (set! asset-enum (+ c 1))
+      c)))
+
+(define asset-create (asset-enum-next!))
+(define asset-delete (asset-enum-next!))
+(define asset-reconfigure (asset-enum-next!))
+(define asset-open (asset-enum-next!))
+(define asset-freeze (asset-enum-next!))
+(define asset-transfer (asset-enum-next!))
+(define asset-clawback (asset-enum-next!))
+(define asset-close (asset-enum-next!))
 
 (define (asset-lget addr key)
   (if (equal? addr '(txn Sender))
@@ -265,8 +271,7 @@
                                    (= (txn OnCompletion) NoOp)
                                    (= (txn Sender) freezer))
                         (error "freeze: bad preconditions"))
-                      (app-updates ((lvars-of account (frozen frozen))))
-                      1))]
+                      (app-updates ((lvars-of account (frozen frozen))))))]
 
              [,asset-transfer
               (with ([accs (receiver)]
@@ -329,8 +334,6 @@
                   (eq? (first (first ast)) 'begin))
              (append (stealc-flatten-begin (rest (first ast))) (stealc-flatten-begin-helper (rest ast)))
              (cons (stealc-flatten-begin (first ast)) (stealc-flatten-begin-helper (rest ast))))]))
-
-
 
 (define (stealc-flatten-begin ast)
   (cond [(null? ast) ast]
