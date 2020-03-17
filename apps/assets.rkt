@@ -66,8 +66,9 @@
         [else sym]))
 
 (define (app-program-helper ast params local-args local-accs)
-  (cond [(null? ast) '()]
+  (cond [(null? ast) ast]
         [(number? ast) ast]
+        [(string? ast) ast]
         [(symbol? ast) (app-rewrite-subst params local-args local-accs ast)]
         [(eq? (first ast) 'with)
          (app-program-helper (third ast)
@@ -117,10 +118,6 @@
           (map (app-compile-var-updates #f params args accs (maybe-second (assoc 'lvars-of ast))) (maybe-rest (maybe-rest (assoc 'lvars-of ast))))
           '(1)))
 
-;; TODO check that short-circuiting behavior is safe where used
-;; TODO should `and` have short-circuit semantics when compiled?
-;; TODO or should an intermediary 0 somewhere in ! force failure?
-
 ;; TODO enforce that these numbers are distinct
 (define asset-create 0)
 (define asset-delete 1)
@@ -143,44 +140,41 @@
 
 ;; fails and returns 0 if trying to set a zero address to a nonzero one
 (define (asset-gset-if-nonzero! addr val)
-  `(if (and (= (app-gget ,addr) (global ZeroAddress))
-            (not (= ,val (global ZeroAddress))))
-       0
-       (begin
-         (app-gset! ,addr (app-gget ,addr) ,val)
-         1)))
+  `(begin
+     (when (and (= (app-gget ,addr) (global ZeroAddress))
+                (not (= ,val (global ZeroAddress))))
+       (error "cannot set zeroed address to nonzero value"))
+     (app-gset! ,addr ,val)))
 
 (define (asset-frozen? addr)
   `(or (and (= ,addr creator)
             (= (app-gget cfrozen) 1))
-       (and ((not (= ,addr creator)))
-            (= (app-lget-acct ,addr frozen) 1))))
+       (and (not (= ,addr creator))
+            (= ,(asset-lget addr 'frozen) 1))))
 
 ;; fails and returns 0 if addr is frozen
 (define (asset-take-out! addr amt)
-  `(if (= (asset-frozen? ,addr) 1)
-       0
-       (begin
-         (if (= ,addr creator)
-             (app-gset! cbalance (- (app-gget cbalance) ,amt))
-             ,(asset-lset! addr 'balance `(- ,(asset-lget addr 'balance) amt)))
-         1)))
+  `(begin
+     (when ,(asset-frozen? addr)
+       (error "cannot take out frozen asset"))
+     (if (= ,addr creator)
+         (app-gset! cbalance (- (app-gget cbalance) ,amt))
+         ,(asset-lset! addr 'balance `(- ,(asset-lget addr 'balance) amt)))))
 
 ;; fails and returns 0 if addr is frozen
 (define (asset-put-in! addr amt)
-  `(if (= (asset-frozen? ,addr) 1)
-       0
-       (begin
-         (if (= ,addr creator)
-             (app-gset! cbalance (+ (app-gget cbalance) ,amt))
-             ,(asset-lset! addr 'balance `(+ ,(asset-lget addr 'balance) amt)))
-         1)))
+  `(begin
+     (when ,(asset-frozen? addr)
+       (error "cannot put in frozen asset"))
+     (if (= ,addr creator)
+         (app-gset! cbalance (+ (app-gget cbalance) ,amt))
+         ,(asset-lset! addr 'balance `(+ ,(asset-lget addr 'balance) amt)))))
 
 ;; fails and returns 0 if trying to take out or put into a frozen address
 (define (asset-move! snd rcv amt)
-  `(if (= ,(asset-take-out! snd amt) 1)
-       ,(asset-put-in! rcv amt)
-       0))
+  `(begin
+     ,(asset-take-out! snd amt)
+     ,(asset-put-in! rcv amt)))
 
 (define asset-application
   `((params (int supply)
@@ -211,17 +205,18 @@
              ;; TODO check type of proc, args...
              [,asset-create
               (with ([args (manager reserve freezer clawback)])
-                    (if (and (= (txn ApplicationID) 0)
-                             (= (txn ApplicationNumArgs) 5)
-                             (= (txn ApplicationNumAccs) 0)
-                             (= (txn OnCompletion) NoOp)
-                             (= creator (txn Sender)))
-                        (app-updates ((gvars (manager manager)
-                                             (reserve reserve)
-                                             (freezer freezer)
-                                             (clawback clawback)
-                                             (cbalance supply))))
-                        0))]
+                    (begin
+                      (unless (and (= (txn ApplicationID) 0)
+                                   (= (txn ApplicationNumArgs) 5)
+                                   (= (txn ApplicationNumAccs) 0)
+                                   (= (txn OnCompletion) NoOp)
+                                   (= creator (txn Sender)))
+                        (error "create: bad preconditions"))
+                      (app-updates ((gvars (manager manager)
+                                           (reserve reserve)
+                                           (freezer freezer)
+                                           (clawback clawback)
+                                           (cbalance supply))))))]
 
              [,asset-delete
               (and (not (= (txn ApplicationID) 0))
@@ -232,247 +227,124 @@
                    (= supply (app-gget cbalance)))]
 
              [,asset-reconfigure
-              (with ([args (new-manager reserve freezer clawback)])
-                    (if (and (not (= (txn ApplicationID) 0))
-                             (= (txn ApplicationNumArgs) 5)
-                             (= (txn ApplicationNumAccs) 0)
-                             (= (txn OnCompletion) NoOp)
-                             (= (txn Sender) (app-gget manager)))
+              (with ([args (new-manager new-reserve new-freezer new-clawback)])
+                    (begin
+                      (unless (and (not (= (txn ApplicationID) 0))
+                                   (= (txn ApplicationNumArgs) 5)
+                                   (= (txn ApplicationNumAccs) 0)
+                                   (= (txn OnCompletion) NoOp)
+                                   (= (txn Sender) (app-gget manager)))
+                        (error "create: bad preconditions"))
 
-                        ;; note: must return 0 if this returns 0
-                        (and ,(asset-gset-if-nonzero! 'manager 'new-manager)
-                             ,(asset-gset-if-nonzero! 'reserve 'reserve)
-                             ,(asset-gset-if-nonzero! 'freezer 'freezer)
-                             ,(asset-gset-if-nonzero! 'clawback 'clawback))
-                        0))]
+                      ;; note: must return 0 if this returns 0
+                      ,(asset-gset-if-nonzero! 'manager 'new-manager)
+                      ,(asset-gset-if-nonzero! 'reserve 'new-reserve)
+                      ,(asset-gset-if-nonzero! 'freezer 'new-freezer)
+                      ,(asset-gset-if-nonzero! 'clawback 'new-clawback)
+                      1))]
 
              [,asset-open
-              (if (and (not (= (txn ApplicationID) 0))
-                       (= (txn ApplicationNumArgs) 1)
-                       (= (txn ApplicationNumAccs) 0)
-                       (= (txn OnCompletion) OptIn)
-                       (not (= (ApplicationOptedIn (txn Sender)) 1))
-                       (not (= (txn Sender) creator)))
-                  (app-updates ((lvars (balance 0)
-                                       (frozen defaultfrozen))))
-                  0)]
+              (begin
+                (unless (and (not (= (txn ApplicationID) 0))
+                             (= (txn ApplicationNumArgs) 1)
+                             (= (txn ApplicationNumAccs) 0)
+                             (= (txn OnCompletion) OptIn)
+                             (not (= (ApplicationOptedIn (txn Sender)) 1))
+                             (not (= (txn Sender) creator)))
+                  (error "open: bad preconditions"))
+                (app-updates ((lvars (balance 0)
+                                     (frozen defaultfrozen)))))]
 
              [,asset-freeze
               (with ([accs (account)]
                      [args (frozen)])
-                    (if (and (not (= (txn ApplicationID) 0))
-                             (= (txn ApplicationNumArgs) 2)
-                             (= (txn ApplicationNumAccs) 1)
-                             (= (txn OnCompletion) NoOp)
-                             (= (txn Sender) freezer))
-                        (app-updates ((lvars-of account (frozen frozen))))
-                        0))]
+                    (begin
+                      (unless (and (not (= (txn ApplicationID) 0))
+                                   (= (txn ApplicationNumArgs) 2)
+                                   (= (txn ApplicationNumAccs) 1)
+                                   (= (txn OnCompletion) NoOp)
+                                   (= (txn Sender) freezer))
+                        (error "freeze: bad preconditions"))
+                      (app-updates ((lvars-of account (frozen frozen))))
+                      1))]
 
              [,asset-transfer
               (with ([accs (receiver)]
                      [args (amount)])
-                    (if (and (not (= (txn ApplicationID) 0))
-                             (= (txn ApplicationNumArgs) 2)
-                             (= (txn ApplicationNumAccs) 1)
-                             (= (txn OnCompletion) NoOp))
-                        (if (= amount 0)
-                            1
-                            ,(asset-move! '(txn Sender) 'receiver 'amount))
-                        0))]
+                    (begin
+                      (unless (and (not (= (txn ApplicationID) 0))
+                                   (= (txn ApplicationNumArgs) 2)
+                                   (= (txn ApplicationNumAccs) 1)
+                                   (= (txn OnCompletion) NoOp))
+                        (error "transfer: bad preconditions"))
+                      (when (not (= amount 0))
+                        ,(asset-move! '(txn Sender) 'receiver 'amount))
+                      1))]
 
              [,asset-clawback
               (with ([accs (sender receiver)]
                      [args (amount)])
-                    (if (and (not (= (txn ApplicationID) 0))
-                             (= (txn ApplicationNumArgs) 2)
-                             (= (txn ApplicationNumAccs) 2)
-                             (= (txn OnCompletion) NoOp)
-                             (= (txn Sender) clawback))
-                        (if (= amount 0)
-                            1
-                            ,(asset-move! 'sender 'receiver 'amount))
-                        0))]
+                    (begin
+                      (unless (and (not (= (txn ApplicationID) 0))
+                                   (= (txn ApplicationNumArgs) 2)
+                                   (= (txn ApplicationNumAccs) 2)
+                                   (= (txn OnCompletion) NoOp)
+                                   (= (txn Sender) clawback))
+                        (error "clawback: bad preconditions"))
+                      (when (not (= amount 0))
+                        ,(asset-move! 'sender 'receiver 'amount))
+                      1))]
 
              ;; note: since creator cannot optin, creator cannot close
              [,asset-close
               (with ([accs (closeto receiver)]
                      [args (amount)])
-                    (if (and (not (= (txn ApplicationID) 0))
-                             (= (txn ApplicationNumArgs) 2)
-                             (or (and (= (txn ApplicationNumAccs) 1)
-                                      (= (txn ApplicationNumArgs 1)))
-                                 (and (= (txn ApplicationNumAccs) 2)
-                                      (= (txn ApplicationNumArgs 2))))
-                             (= (txn OnCompletion) CloseOut)
-                        (if (= (txn ApplicationNumAccs) 1)
-                            ,(asset-move! '(txn Sender) 'closeto
-                                          (asset-lget '(txn Sender) 'balance))
-
-                            ;; note: must return 0 if this returns 0
-                            (and ,(asset-move! '(txn Sender) 'receiver 'amount)
-                                 ,(asset-move! '(txn Sender) 'closeto
-                                               (asset-lget '(txn Sender) 'balance))))
-                        0)))]
+                    (begin
+                      (unless (and (not (= (txn ApplicationID) 0))
+                                   (= (txn ApplicationNumArgs) 2)
+                                   (or (and (= (txn ApplicationNumAccs) 1)
+                                            (= (txn ApplicationNumArgs 1)))
+                                       (and (= (txn ApplicationNumAccs) 2)
+                                            (= (txn ApplicationNumArgs 2))))
+                                   (= (txn OnCompletion) CloseOut))
+                        (error "close: bad preconditions"))
+                      (if (= (txn ApplicationNumAccs) 1)
+                          ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) 'balance))
+                          (begin
+                            ,(asset-move! '(txn Sender) 'receiver 'amount)
+                            ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) 'balance))))
+                      1))]
              [else 0])))
 
     (onclear (app-gset! cbalance (+ cbalance (app-lget 'balance))))))
 
-;; (app-schema asset-application)
-(pretty-print (app-program asset-application))
-(pretty-print (app-clear-program asset-application))
+(define (stealc-flatten-begin-helper ast)
+  (cond [(null? ast) ast]
+        [(number? ast) ast]
+        [(string? ast) ast]
+        [(symbol? ast) ast]
+        [else
+         (if (and (list? (first ast))
+                  (> (length (first ast)) 0)
+                  (eq? (first (first ast)) 'begin))
+             (append (stealc-flatten-begin (rest (first ast))) (stealc-flatten-begin-helper (rest ast)))
+             (cons (stealc-flatten-begin (first ast)) (stealc-flatten-begin-helper (rest ast))))]))
 
-;;;;;
 
-;; (define (asset-settable old new)
-;;   `(or (not (= ,old (global ZeroAddress)))
-;;        (= ,new (global ZeroAddress))))
 
-;; (app-bind! create
-;;            'app-create
-;;            '(args (manager reserve freezer clawback))
-;;            `((manager manager)
-;;              (reserve reserve)
-;;              (freezer freezer)
-;;              (clawback clawback))) ;; TODO write supply to lvars
+(define (stealc-flatten-begin ast)
+  (cond [(null? ast) ast]
+        [(number? ast) ast]
+        [(string? ast) ast]
+        [(symbol? ast) ast]
+        [else
+         (if (eq? (first ast) 'begin)
+             (let ([flattened (stealc-flatten-begin-helper (rest ast))])
+               (if (equal? flattened (rest ast))
+                   (cons 'begin (rest ast))
+                 (stealc-flatten-begin (cons 'begin flattened))))
+             (cons (stealc-flatten-begin (first ast)) (stealc-flatten-begin (rest ast))))]))
 
-;; (app-bind! reconfig
-;;            'app-call
-;;            '(args (manager reserve freezer clawback))
-;;            `(if (and (= (txn Sender) (app-get manager))
-;;                      ,(asset-settable '(app-gget reserve) 'reserve)
-;;                      ,(asset-settable '(app-gget freezer) 'freezer)
-;;                      ,(asset-settable '(app-gget clawback)) 'clawback)
-;;                 ((gvars (manager manager)
-;;                         (reserve reserve)
-;;                         (freezer freezer)
-;;                         (clawback clawback)))
-;;                 fail!))
-
-;; (app-bind! destroy 'app-delete ())
-
-;; (app-bind! open 'app-open ())
-
-;; ;; note: make sure closeout check passes/fails for creator closeout to self
-
-;; TODO prohibit creator from holding asset
-
-;; (app-bind! transfer
-;;            'app-call
-;;            '(addrs receiver)
-;;            `(if (not ,(asset-frozen))
-;;                 ,(asset-move '(txn Sender) 'receiver)
-;;                 fail!))
-
-;;;;;
-
-;; (define app-fn-kinds
-;;   '(app-create app-delete app-update app-optin app-closeout app-clear app-call))
-
-;; (define (app-fn-kind appfn)
-;;   (second appfn))
-
-;; (define (app-get-sym-fns sym app)
-;;   (filter (lambda (fn) (eq? (app-fn-kind fn) sym)) (app-fns app)))
-
-;; (define (app-get-sym-fn-1 sym app)
-;;   (let ([fns (app-get-sym-fns sym app)])
-;;     (if (not (= (length fns) 1))
-;;         (raise (format "app-get-sym-fn-1: sym ~v appeared ~v times" sym (length fns)))
-;;         (rest (rest (first fns))))))
-
-;; (define (app-create-fn app) (app-get-sym-fn-1 'app-create app))
-;; (define (app-delete-fn app) (app-get-sym-fn-1 'app-delete app))
-;; (define (app-update-fn app) (app-get-sym-fn-1 'app-update app))
-;; (define (app-optin-fn app) (app-get-sym-fn-1 'app-optin app))
-;; (define (app-closeout-fn app) (app-get-sym-fn-1 'app-closeout app))
-;; (define (app-clear-fn app) (app-get-sym-fn-1 'app-clear app))
-;; (define (app-call-fns app) (app-get-sym-fns 'app-call app))
-
-;; (define (app-rewrite-fn-helper-first approval? params args ast)
-;;   (app-rewrite-fn-helper approval? params args ast))
-
-;; (define (app-rewrite-fn-helper-rest approval? params args ast)
-;;   (app-rewrite-fn-helper approval? params args ast))
-
-;; (define (app-compile-var-updates global? params args acct)
-;;   (lambda (ast) ;; (key value)
-;;     (let ([key (first ast)]
-;;           [value (second ast)])
-;;       (append (if global?
-;;                   '(app-gset!)
-;;                   (if (not (null? acct))
-;;                       `(app-lset-acct! ,(app-rewrite-fn-helper #f params args acct))
-;;                       '(app-lset!)))
-;;               (list key
-;;                     (app-rewrite-fn-helper #f params args value))))))
-
-;; (define (maybe fn)
-;;   (lambda (l)
-;;     (if (and l (not (null? l)))
-;;         (fn l)
-;;         '())))
-
-;; (define maybe-rest (maybe rest))
-;; (define maybe-first (maybe first))
-;; (define maybe-second (maybe second))
-
-;; (define (app-compile-updates params args ast)
-;;   (append '(begin)
-;;           (map (app-compile-var-updates #t params args '()) (maybe-rest (assoc 'gvars ast)))
-;;           (map (app-compile-var-updates #f params args '()) (maybe-rest (assoc 'lvars ast)))
-;;           (map (app-compile-var-updates #f params args (maybe-second (assoc 'lvars-of ast))) (maybe-rest (maybe-rest (assoc 'lvars-of ast))))
-;;           '(1)))
-
-;; (define (app-rewrite-updates approval? params args ast)
-;;   (if approval?
-;;       1
-;;       (app-compile-updates params args ast)))
-
-;; (define (app-params-assoc params sym)
-;;   (cond [(null? params) #f]
-;;         [(eq? (last (first params)) sym) (first params)]
-;;         [else (app-params-assoc (rest params) sym)]))
-
-;; (define (app-rewrite-arg n)
-;;   `(txn ApplicationArg ,n))
-
-;; (define (app-rewrite-tmpl spec)
-;;   (cond [(= (length spec) 0) (raise "app-rewrite-tmpl")] ;; TODO add err
-;;         [(= (length spec) 2) (cons (first spec) (app-rewrite-tmpl (rest spec)))]
-;;         [else (list (string->symbol (string-append "TMPL_" (string-upcase (symbol->string (first spec))))))]))
-
-;; (define (app-arg-index args sym)
-;;   (app-rewrite-arg (- (length args) (length (memq sym args)))))
-
-;; (define (app-rewrite-subst params args sym)
-;;   (cond [(memq sym args) (app-arg-index args sym)]
-;;         [(app-params-assoc params sym) (app-rewrite-tmpl (app-params-assoc params sym))]
-;;         [else sym]))
-
-;; (define (app-rewrite-fn-helper approval? params args ast)
-;;   (cond [(number? ast) ast]
-;;         [(symbol? ast) (app-rewrite-subst params args ast)]
-;;         [(null? ast) ast]
-;;         [(eq? (first ast) 'app-updates) (app-rewrite-updates approval? params args (second ast))]
-;;         [else (cons (app-rewrite-fn-helper-first approval? params args (first ast))
-;;                     (app-rewrite-fn-helper-rest approval? params args (rest ast)))]))
-
-;; (define (app-rewrite-fn approval? params fn)
-;;   (let ([args (first fn)]
-;;         [body (second fn)])
-;;     (app-rewrite-fn-helper approval? params args body)))
-
-;; (define (app-programs-helper approval? app)
-;;   (define (sel l) (rest (rest (first (rest l)))))
-;;   `(cond [(= (txn OnCompletion) CreateApplication)
-;;           ,(app-rewrite-fn approval? (app-params app) (app-create-fn app))]
-;;          [(= (txn OnCompletion) DeleteApplication)
-;;           ,(app-rewrite-fn approval? (app-params app) (app-delete-fn app))]
-;;          [(= (txn OnCompletion) OptIn)
-;;           ,(app-rewrite-fn approval? (app-params app) (app-optin-fn app))]
-;;          [else
-;;           ,(app-rewrite-fn approval? (app-params app) (sel (app-call-fns app)))])) ;; TODO handle app calls correctly
-
-;; (define (app-programs app)
-;;   (list (list 'approval (app-programs-helper #t app))
-;;         (list 'state-update (app-programs-helper #f app))))
+(pretty-print (app-schema asset-application))
+(pretty-print (stealc-flatten-begin (app-program asset-application)))
+(pretty-print (stealc-flatten-begin (app-clear-program asset-application)))
