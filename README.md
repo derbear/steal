@@ -13,7 +13,7 @@ Let's say we have the following sTEAL contract code:
                    (txn Receiver)))
 ```
 
-We can use the Scheme compiler `stealc` to make TEAL assembly code.
+We can use the sTEAL compiler `stealc` to make TEAL assembly code.
 If we have the following code in `example.rkt`
 
 ```
@@ -111,9 +111,12 @@ int TMPL_FEE
 &&
 ```
 
-## Short-circuiting 
+## Short-circuiting
 
-The `if` symbol produces TEAL code which behaves similarly to Lisp's `if`
+Note that the `and` and `or` operators do not short-circuit as they do in
+Scheme.
+
+The `if` symbol produces TEAL code which behaves similarly to Scheme's `if`
 special form.
 
 ```
