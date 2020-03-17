@@ -9,7 +9,7 @@
 (define (app-gvars app) (app-get 'gvars app))
 (define (app-lvars app) (app-get 'lvars app))
 (define (app-prog app) (app-get 'prog app))
-;; (define (app-fns app) (app-get 'fns app))
+(define (app-onclear app) (app-get 'onclear app))
 
 (define (app-int? var) (eq? (first var) 'int))
 (define (app-blob? var) (not (app-int? var)))
@@ -24,6 +24,7 @@
     (local-state-ints ,(app-ints (app-lvars app)))))
 
 (define (app-program app) (app-program-helper (first (app-prog app)) (app-params app) '() '()))
+(define (app-clear-program app) (app-program-helper (first (app-onclear app)) (app-params app) '() '()))
 
 (define (with-sym sym ast)
   (if (assoc sym (second ast))
@@ -104,7 +105,7 @@
     (if (and l (not (null? l)))
         (fn l)
         '())))
-        
+
 (define maybe-rest (maybe rest))
 (define maybe-first (maybe first))
 (define maybe-second (maybe second))
@@ -116,6 +117,10 @@
           (map (app-compile-var-updates #f params args accs (maybe-second (assoc 'lvars-of ast))) (maybe-rest (maybe-rest (assoc 'lvars-of ast))))
           '(1)))
 
+;; TODO check that short-circuiting behavior is safe where used
+;; TODO should `and` have short-circuit semantics when compiled?
+;; TODO or should an intermediary 0 somewhere in ! force failure?
+
 ;; TODO enforce that these numbers are distinct
 (define asset-create 0)
 (define asset-delete 1)
@@ -124,6 +129,58 @@
 (define asset-freeze 4)
 (define asset-transfer 5)
 (define asset-clawback 6)
+(define asset-close 7)
+
+(define (asset-lget addr key)
+  (if (equal? addr '(txn Sender))
+      `(app-lget ,key)
+      `(app-lget-acct ,addr ,key)))
+
+(define (asset-lset! addr key val)
+  (if (equal? addr '(txn Sender))
+      `(app-lset! ,key ,val)
+      `(app-lset-acct! ,addr ,key ,val)))
+
+;; fails and returns 0 if trying to set a zero address to a nonzero one
+(define (asset-gset-if-nonzero! addr val)
+  `(if (and (= (app-gget ,addr) (global ZeroAddress))
+            (not (= ,val (global ZeroAddress))))
+       0
+       (begin
+         (app-gset! ,addr (app-gget ,addr) ,val)
+         1)))
+
+(define (asset-frozen? addr)
+  `(or (and (= ,addr creator)
+            (= (app-gget cfrozen) 1))
+       (and ((not (= ,addr creator)))
+            (= (app-lget-acct ,addr frozen) 1))))
+
+;; fails and returns 0 if addr is frozen
+(define (asset-take-out! addr amt)
+  `(if (= (asset-frozen? ,addr) 1)
+       0
+       (begin
+         (if (= ,addr creator)
+             (app-gset! cbalance (- (app-gget cbalance) ,amt))
+             ,(asset-lset! addr 'balance `(- ,(asset-lget addr 'balance) amt)))
+         1)))
+
+;; fails and returns 0 if addr is frozen
+(define (asset-put-in! addr amt)
+  `(if (= (asset-frozen? ,addr) 1)
+       0
+       (begin
+         (if (= ,addr creator)
+             (app-gset! cbalance (+ (app-gget cbalance) ,amt))
+             ,(asset-lset! addr 'balance `(+ ,(asset-lget addr 'balance) amt)))
+         1)))
+
+;; fails and returns 0 if trying to take out or put into a frozen address
+(define (asset-move! snd rcv amt)
+  `(if (= ,(asset-take-out! snd amt) 1)
+       ,(asset-put-in! rcv amt)
+       0))
 
 (define asset-application
   `((params (int supply)
@@ -138,7 +195,9 @@
     (gvars (addr manager)
            (addr reserve)
            (addr freezer)
-           (addr clawback))
+           (addr clawback)
+           (int cbalance)
+           (int cfrozen))
 
     (lvars (int balance)
            (int frozen))
@@ -155,24 +214,22 @@
                     (if (and (= (txn ApplicationID) 0)
                              (= (txn ApplicationNumArgs) 5)
                              (= (txn ApplicationNumAccs) 0)
-                             (= (txn OnCompletion) OptIn)
+                             (= (txn OnCompletion) NoOp)
                              (= creator (txn Sender)))
                         (app-updates ((gvars (manager manager)
                                              (reserve reserve)
                                              (freezer freezer)
-                                             (clawback clawback))
-                                      (lvars (balance supply))))
+                                             (clawback clawback)
+                                             (cbalance supply))))
                         0))]
 
              [,asset-delete
-              ;; note: manager nonzero check left out
               (and (not (= (txn ApplicationID) 0))
                    (= (txn ApplicationNumArgs) 1)
                    (= (txn ApplicationNumAccs) 0)
                    (= (txn OnCompletion) DeleteApplication)
-                   (= (txn Sender) (app-gget manager)))]
-                   ;; (= supply (app-lget-acct creator balance)))] ;; TODO syntactically invalid to use creator here
-                   ;;                                              ;; wait for opcode
+                   (= (txn Sender) (app-gget manager))
+                   (= supply (app-gget cbalance)))]
 
              [,asset-reconfigure
               (with ([args (new-manager reserve freezer clawback)])
@@ -181,20 +238,21 @@
                              (= (txn ApplicationNumAccs) 0)
                              (= (txn OnCompletion) NoOp)
                              (= (txn Sender) (app-gget manager)))
-                        ;; TODO cannot set 0 field to be nonzero
-                        (app-updates ((gvars (manager new-manager)
-                                             (reserve reserve)
-                                             (freezer freezer)
-                                             (clawback clawback))))
+
+                        ;; note: must return 0 if this returns 0
+                        (and ,(asset-gset-if-nonzero! 'manager 'new-manager)
+                             ,(asset-gset-if-nonzero! 'reserve 'reserve)
+                             ,(asset-gset-if-nonzero! 'freezer 'freezer)
+                             ,(asset-gset-if-nonzero! 'clawback 'clawback))
                         0))]
 
-             ;; TODO make sure clawback cannot allocate
              [,asset-open
               (if (and (not (= (txn ApplicationID) 0))
                        (= (txn ApplicationNumArgs) 1)
                        (= (txn ApplicationNumAccs) 0)
-                       (= (txn OnCompletion) OptIn))
-                  ;; TODO noop if already opted in...
+                       (= (txn OnCompletion) OptIn)
+                       (not (= (ApplicationOptedIn (txn Sender)) 1))
+                       (not (= (txn Sender) creator)))
                   (app-updates ((lvars (balance 0)
                                        (frozen defaultfrozen))))
                   0)]
@@ -217,13 +275,9 @@
                              (= (txn ApplicationNumArgs) 2)
                              (= (txn ApplicationNumAccs) 1)
                              (= (txn OnCompletion) NoOp))
-                        (cond [(= amount 0) 1]
-                              [(= (app-get frozen) 1) 0]
-                              [else
-                               (begin
-                                 (app-lset! balance (- (app-lget balance) amount))
-                                 (app-lset-acct! receiver balance (+ (app-lget-acct receiver balance) amount))
-                                 1)])
+                        (if (= amount 0)
+                            1
+                            ,(asset-move! '(txn Sender) 'receiver 'amount))
                         0))]
 
              [,asset-clawback
@@ -234,41 +288,38 @@
                              (= (txn ApplicationNumAccs) 2)
                              (= (txn OnCompletion) NoOp)
                              (= (txn Sender) clawback))
-                        (cond [(= amount 0) 1]
-                              [else
-                               (begin
-                                 (app-lset-acct! sender balance (- (app-lget-acct sender balance) amount))
-                                 (app-lset-acct! receiver balance (+ (app-lget-acct receiver balance) amount))
-                                 1)])
+                        (if (= amount 0)
+                            1
+                            ,(asset-move! 'sender 'receiver 'amount))
                         0))]
 
-             ;; TODO can creator closeout????
-             ;; [,asset-close
-             ;;  (with ([accs (closeto receiver)]
-             ;;         [args (amount)])
-             ;;        (if (and (not (= (txn ApplicationID) 0))
-             ;;                 (= (txn ApplicationNumArgs) 2)
-             ;;                 (or (= (txn ApplicationNumAccs) 1) (= (txn ApplicationNumAccs) 2))
-             ;;                 (= (txn OnCompletion) NoOp)
-             ;;                 (= (txn Sender) clawback))
-             ;;            (cond [(= (txn ApplicationNumAccs) 2)
-             ;;                   (begin
-             ;;                     (app-lset-acct! receiver balance (+ (app-lget-acct creator balance) (app-lget balance)))
-             ;;                     (app-lset! balance 0)
-             ;;                     1)]
-             ;;                  [(= (txn Ap
+             ;; note: since creator cannot optin, creator cannot close
+             [,asset-close
+              (with ([accs (closeto receiver)]
+                     [args (amount)])
+                    (if (and (not (= (txn ApplicationID) 0))
+                             (= (txn ApplicationNumArgs) 2)
+                             (or (and (= (txn ApplicationNumAccs) 1)
+                                      (= (txn ApplicationNumArgs 1)))
+                                 (and (= (txn ApplicationNumAccs) 2)
+                                      (= (txn ApplicationNumArgs 2))))
+                             (= (txn OnCompletion) CloseOut)
+                        (if (= (txn ApplicationNumAccs) 1)
+                            ,(asset-move! '(txn Sender) 'closeto
+                                          (asset-lget '(txn Sender) 'balance))
 
-             ;;            0))]
-                                 
-             [else 0])))))
+                            ;; note: must return 0 if this returns 0
+                            (and ,(asset-move! '(txn Sender) 'receiver 'amount)
+                                 ,(asset-move! '(txn Sender) 'closeto
+                                               (asset-lget '(txn Sender) 'balance))))
+                        0)))]
+             [else 0])))
 
-     ;; (transfer app-call)
-     ;; (clawback app-call)
-     ;; (close app-closeout) ;; TODO prohibit creator from closing out
-     ;; (clear app-clear))))
+    (onclear (app-gset! cbalance (+ cbalance (app-lget 'balance))))))
 
 ;; (app-schema asset-application)
 (pretty-print (app-program asset-application))
+(pretty-print (app-clear-program asset-application))
 
 ;;;;;
 
@@ -360,7 +411,7 @@
 ;;     (if (and l (not (null? l)))
 ;;         (fn l)
 ;;         '())))
-        
+
 ;; (define maybe-rest (maybe rest))
 ;; (define maybe-first (maybe first))
 ;; (define maybe-second (maybe second))
@@ -425,4 +476,3 @@
 ;; (define (app-programs app)
 ;;   (list (list 'approval (app-programs-helper #t app))
 ;;         (list 'state-update (app-programs-helper #f app))))
-
