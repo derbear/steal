@@ -4,6 +4,27 @@
 (provide app-program)
 (provide app-clear-program)
 
+(provide NoOp)
+(provide OptIn)
+(provide CloseOut)
+(provide ClearState)
+(provide UpdateApplication)
+(provide DeleteApplication)
+
+(define app-on-completion-enum 0)
+(define (app-on-completion-enum-next!)
+  (begin
+    (let ([c app-on-completion-enum])
+      (set! app-on-completion-enum (+ c 1))
+      c)))
+
+(define NoOp (app-on-completion-enum-next!))
+(define OptIn (app-on-completion-enum-next!))
+(define CloseOut (app-on-completion-enum-next!))
+(define ClearState (app-on-completion-enum-next!))
+(define UpdateApplication (app-on-completion-enum-next!))
+(define DeleteApplication (app-on-completion-enum-next!))
+
 (define (app-get sym app) (rest (assoc sym app)))
 (define (app-params app) (app-get 'params app))
 (define (app-gvars app) (app-get 'gvars app))
@@ -45,10 +66,10 @@
         [else (list (string->symbol (string-append "TMPL_" (string-upcase (symbol->string (first spec))))))]))
 
 (define (app-rewrite-arg n)
-  `(txn ApplicationArg ,n))
+  `(txna ApplicationArgs ,n))
 
 (define (app-rewrite-acc n)
-  `(txn ApplicationAcc ,n))
+  `(txna Accounts ,(+ n 1)))
 
 (define (app-acc-rewrite ast)
   (third ast))
@@ -80,9 +101,12 @@
                               local-args
                               local-accs
                               (second ast))]
-        [(or (eq? (first ast) 'app-lget-acct)
-             (eq? (first ast) 'app-lset-acct!))
-         (cons (first ast)
+        [(or (eq? (first ast) 'app-read-local-acct)
+             (eq? (first ast) 'app-write-local-acct!))
+         (cons (string->symbol (string-replace (symbol->string (first ast))
+                                               "-acct"
+                                               ""))
+                                
                (cons (app-acc-rewrite (app-program-helper (second ast) params local-args local-accs))
                      (app-program-helper (rest (rest ast)) params local-args local-accs)))]
 
@@ -94,11 +118,11 @@
     (let ([key (first ast)]
           [value (second ast)])
       (append (if global?
-                  '(app-gset!)
+                  '(app-write-global!)
                   (if (not (null? acct))
-                      `(app-lset-acct! ,(app-acc-rewrite (app-program-helper acct params args accs)))
-                      '(app-lset!)))
-              (list key
+                      `(app-write-local! ,(app-acc-rewrite (app-program-helper acct params args accs)))
+                      '(app-write-local!)))
+              (list (symbol->string key)
                     (app-program-helper value params args accs))))))
 
 (define (maybe fn)

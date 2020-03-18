@@ -36,12 +36,60 @@
              (let ([flattened (stealc-flatten-begin-helper (rest ast))])
                (if (equal? flattened (rest ast))
                    (cons 'begin (rest ast))
-                 (stealc-flatten-begin (cons 'begin flattened))))
+                   (stealc-flatten-begin (cons 'begin flattened))))
              (cons (stealc-flatten-begin (first ast)) (stealc-flatten-begin (rest ast))))]))
 
-(pretty-print (app-schema asset-application))
+;; (displayln (stealc
+;;             '(begin
+;;                a
+;;                (d e f)
+;;                g)))
+
+;; (displayln (stealc
+;;             '(cond
+;;                [else d e f])))
+
+;; (displayln (stealc
+;;             '(cond
+;;                [(= a 0) b g]
+;;                [(= a 1) c]
+;;                [else d e f])))
+
+;; (displayln (stealc
+;;             '(begin
+;;                (unless (= a 0)
+;;                  (x a b)
+;;                  s
+;;                  y)
+;;                (x c a))))
+
+;; (displayln (stealc
+;;             '(begin
+;;                (when (= a 0)
+;;                  (x a b)
+;;                  s
+;;                  y)
+;;                (x c a))))
+               
+;; (displayln (stealc
+;;             '(begin
+;;                (when (= a 0)
+;;                  (error "asdf")
+;;                  s
+;;                  y)
+;;                (x c a))))
+
+
+;; TODO
+;; pop and discard top result of read operations
+;; translate raw strings to byte base64
+;; fast assertions (use division)
+
+;; (displayln (app-schema asset-application))
+(displayln (stealc (app-program asset-application)))
 (pretty-print (stealc-flatten-begin (app-program asset-application)))
-(pretty-print (stealc-flatten-begin (app-clear-program asset-application)))
+;; (displayln (stealc (app-clear-program asset-application)))
+;; (pretty-print (app-clear-program asset-application))
 
 ;; (define args
 ;;   '((TMPL_FEE 100000)
