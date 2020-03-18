@@ -15,10 +15,9 @@
 (define asset-reconfigure (asset-enum-next!))
 (define asset-delete (asset-enum-next!))
 (define asset-open (asset-enum-next!))
-(define asset-freeze (asset-enum-next!))
-(define asset-transfer (asset-enum-next!))
 (define asset-clawback (asset-enum-next!))
-(define asset-close (asset-enum-next!))
+(define asset-transfer (asset-enum-next!))
+(define asset-freeze (asset-enum-next!))
 
 (define (asset-lget addr key)
   (if (equal? addr '(txn Sender))
@@ -53,9 +52,10 @@
     (if bypass
         ifblock
         `(begin
-           (when ,(asset-frozen? addr)
-             (error "cannot put in frozen asset"))
-           ,ifblock))))
+           (unless (= ,amt 0)
+             (when ,(asset-frozen? addr)
+               (error "cannot modify frozen asset"))
+             ,ifblock)))))
 
 (define (asset-take-out! addr amt bypass)
   (asset-modify! addr amt bypass '-))
@@ -147,6 +147,37 @@
                 (app-updates ((lvars (balance 0)
                                      (frozen defaultfrozen)))))]
 
+             [(= proc ,asset-clawback)
+              (with ([accs (sender receiver)]
+                     [args (amount)])
+                    (begin
+                      (unless (and (not (= (txn ApplicationID) 0))
+                                   (= (txn ApplicationNumArgs) 2)
+                                   (= (txn ApplicationNumAccs) 2)
+                                   (= (txn OnCompletion) ,NoOp)
+                                   (= (txn Sender) clawback))
+                        (error "clawback: bad preconditions"))
+                      ,(asset-move! 'sender 'receiver 'amount #t)
+                      1))]
+
+             ;; note: since creator cannot optin, creator cannot close
+             [(= proc ,asset-transfer)
+              (with ([accs (receiver closeto)]
+                     [args (amount)])
+                    (begin
+                      (unless (and (not (= (txn ApplicationID) 0))
+                                   (= (txn ApplicationNumArgs) 2)
+                                   (= (txn ApplicationNumAccs) 2)
+                                   (or (and (= (txn OnCompletion) ,NoOp)
+                                            (= closeto (global ZeroAddress)))
+                                       (and (= (txn OnCompletion) ,OptIn)
+                                            (not (= closeto (global ZeroAddress))))))
+                        (error "transfer: bad preconditions"))
+                      ,(asset-move! '(txn Sender) 'receiver 'amount #f))
+                      (unless (= closeto (global ZeroAddress))
+                        ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) "balance") #f))
+                      1)]
+
              [(= proc ,asset-freeze)
               (with ([accs (account)]
                      [args (frozen)])
@@ -159,50 +190,6 @@
                         (error "freeze: bad preconditions"))
                       (app-updates ((lvars-of account (frozen frozen))))))]
 
-             [(= proc ,asset-transfer)
-              (with ([accs (receiver)]
-                     [args (amount)])
-                    (begin
-                      (unless (and (not (= (txn ApplicationID) 0))
-                                   (= (txn ApplicationNumArgs) 2)
-                                   (= (txn ApplicationNumAccs) 1)
-                                   (= (txn OnCompletion) ,NoOp))
-                        (error "transfer: bad preconditions"))
-                      (when (not (= amount 0))
-                        ,(asset-move! '(txn Sender) 'receiver 'amount #f))
-                      1))]
-
-             [(= proc ,asset-clawback)
-              (with ([accs (sender receiver)]
-                     [args (amount)])
-                    (begin
-                      (unless (and (not (= (txn ApplicationID) 0))
-                                   (= (txn ApplicationNumArgs) 2)
-                                   (= (txn ApplicationNumAccs) 2)
-                                   (= (txn OnCompletion) ,NoOp)
-                                   (= (txn Sender) clawback))
-                        (error "clawback: bad preconditions"))
-                      (when (not (= amount 0))
-                        ,(asset-move! 'sender 'receiver 'amount #t))
-                      1))]
-
-             ;; note: since creator cannot optin, creator cannot close
-             [(= proc ,asset-close)
-              (with ([accs (closeto receiver)]
-                     [args (amount)])
-                    (begin
-                      (unless (and (not (= (txn ApplicationID) 0))
-                                   (= (txn ApplicationNumArgs) 2)
-                                   (or (and (= (txn ApplicationNumAccs) 1)
-                                            (= (txn ApplicationNumArgs 1)))
-                                       (and (= (txn ApplicationNumAccs) 2)
-                                            (= (txn ApplicationNumArgs 2))))
-                                   (= (txn OnCompletion) ,CloseOut))
-                        (error "close: bad preconditions"))
-                      (when (= (txn ApplicationNumAccs) 2)
-                        ,(asset-move! '(txn Sender) 'receiver 'amount #f))
-                      ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) "balance" ) #f)
-                      1))]
              [else 0])))
 
     (onclear (app-write-global! "cbalance" (+ (app-read-global "cbalance")
