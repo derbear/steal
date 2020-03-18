@@ -86,7 +86,7 @@
 ;; fast assertions (use division)
 
 ;; (displayln (app-schema asset-application))
-(displayln (stealc (app-program asset-application)))
+;; (displayln (stealc (app-program asset-application)))
 (pretty-print (stealc-flatten-begin (app-program asset-application)))
 ;; (displayln (stealc (app-clear-program asset-application)))
 ;; (pretty-print (app-clear-program asset-application))

@@ -12,8 +12,8 @@
       c)))
 
 (define asset-create (asset-enum-next!))
-(define asset-delete (asset-enum-next!))
 (define asset-reconfigure (asset-enum-next!))
+(define asset-delete (asset-enum-next!))
 (define asset-open (asset-enum-next!))
 (define asset-freeze (asset-enum-next!))
 (define asset-transfer (asset-enum-next!))
@@ -44,31 +44,23 @@
        (and (not (= ,addr creator))
             (= ,(asset-lget addr "frozen") 1))))
 
-;; fails and returns 0 if addr is frozen
-(define (asset-take-out! addr amt bypass)
-  (if bypass
-      `(if (= ,addr creator)
-           (app-write-global! "cbalance" (- (app-read-global "cbalance") ,amt))
-           ,(asset-lset! addr "balance" `(- ,(asset-lget addr "balance") ,amt)))
-      `(begin
-         (when ,(asset-frozen? addr)
-           (error "cannot put in frozen asset"))
-         (if (= ,addr creator)
-             (app-write-global! "cbalance" (- (app-read-global "cbalance") ,amt))
-             ,(asset-lset! addr "balance" `(- ,(asset-lget addr "balance") ,amt))))))
+;; fails and returns 0 if addr is frozen unless bypass set
+(define (asset-modify! addr amt bypass op)
+  (let ([ifblock
+         `(if (= ,addr creator)
+           (app-write-global! "cbalance" (,op (app-read-global "cbalance") ,amt))
+           ,(asset-lset! addr "balance" `(,op ,(asset-lget addr "balance") ,amt)))])
+    (if bypass
+        ifblock
+        `(begin
+           (when ,(asset-frozen? addr)
+             (error "cannot put in frozen asset"))
+           ,ifblock))))
 
-;; fails and returns 0 if addr is frozen
+(define (asset-take-out! addr amt bypass)
+  (asset-modify! addr amt bypass '-))
 (define (asset-put-in! addr amt bypass)
-  (if bypass
-      `(if (= ,addr creator)
-           (app-write-global! "cbalance" (+ (app-read-global "cbalance") ,amt))
-           ,(asset-lset! addr "balance" `(+ ,(asset-lget addr "balance") ,amt)))
-      `(begin
-         (when ,(asset-frozen? addr)
-           (error "cannot put in frozen asset"))
-         (if (= ,addr creator)
-             (app-write-global! "cbalance" (+ (app-read-global "cbalance") ,amt))
-             ,(asset-lset! addr "balance" `(+ ,(asset-lget addr "balance") ,amt))))))
+  (asset-modify! addr amt bypass '+))
 
 ;; fails and returns 0 if trying to take out or put into a frozen address unless bypass set
 (define (asset-move! snd rcv amt bypass)
@@ -118,14 +110,6 @@
                                            (clawback clawback)
                                            (cbalance supply))))))]
 
-             [(= proc ,asset-delete)
-              (and (not (= (txn ApplicationID) 0))
-                   (= (txn ApplicationNumArgs) 1)
-                   (= (txn ApplicationNumAccs) 0)
-                   (= (txn OnCompletion) ,DeleteApplication)
-                   (= (txn Sender) (app-read-global "manager"))
-                   (= supply (app-read-global "cbalance")))]
-
              [(= proc ,asset-reconfigure)
               (with ([args (manager reserve freezer clawback)])
                     (begin
@@ -142,6 +126,14 @@
                       ,(asset-gset-if-nonzero! "freezer" 'freezer)
                       ,(asset-gset-if-nonzero! "clawback" 'clawback)
                       1))]
+
+             [(= proc ,asset-delete)
+              (and (not (= (txn ApplicationID) 0))
+                   (= (txn ApplicationNumArgs) 1)
+                   (= (txn ApplicationNumAccs) 0)
+                   (= (txn OnCompletion) ,DeleteApplication)
+                   (= (txn Sender) (app-read-global "manager"))
+                   (= supply (app-read-global "cbalance")))]
 
              [(= proc ,asset-open)
               (begin
