@@ -154,6 +154,7 @@
             [(eq? (first prog) 'global) (stealc-flatten-global lines)]
             [(eq? (first prog) 'byte) (stealc-flatten-byte lines)]
             [(eq? (first prog) 'int) (stealc-flatten-int lines)]
+            [(eq? (first prog) 'note) (stealc-flatten-note lines)]
             [else lines])
       lines))
 
@@ -177,6 +178,9 @@
 
 (define [stealc-flatten-gtxn lines]
   (stealc-flatten-byte lines))
+
+(define [stealc-flatten-note lines]
+  (list (string-join (list "//" (first lines)))))
 
 (define [stealc-preprocess prog]
   (if (list? prog)

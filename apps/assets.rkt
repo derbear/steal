@@ -52,7 +52,8 @@
         ifblock
         `(begin
            (unless (= ,amt 0)
-             (assert (not ,(asset-frozen? addr))) ;; cannot modify frozen asset
+             (note "cannot modify frozen asset")
+             (assert (not ,(asset-frozen? addr)))
              ,ifblock)))))
 
 (define (asset-take-out! addr amt bypass)
@@ -93,6 +94,7 @@
            (cond
 
              [(= proc ,asset-configure)
+              (note "asset configuration")
               (with ([args (new-manager new-reserve new-freezer new-clawback)])
                     (assert (and (= (txn NumAppArgs) 5)
                                  (= (txn NumAccounts) 0)
@@ -118,6 +120,7 @@
                                          (clawback new-clawback)))))]
 
              [(= proc ,asset-delete)
+              (note "asset deletion")
               (and (not (= (txn ApplicationID) 0))
                    (= (txn NumAppArgs) 1)
                    (= (txn NumAccounts) 0)
@@ -126,6 +129,7 @@
                    (= supply (app-read-global cbalance)))]
 
              [(= proc ,asset-open)
+              (note "open asset holding")
               (assert (and (not (= (txn ApplicationID) 0))
                            (= (txn NumAppArgs) 1)
                            (= (txn NumAccounts) 0)
@@ -138,6 +142,7 @@
                                    (frozen defaultfrozen))))]
 
              [(= proc ,asset-clawback)
+              (note "clawback asset")
               (with ([accs (sender receiver)]
                      [args (amount)])
                     (assert (and (not (= (txn ApplicationID) 0))
@@ -150,6 +155,7 @@
 
              ;; note: since creator cannot optin, creator cannot close
              [(= proc ,asset-transfer)
+              (note "transfer asset holding")
               (with ([accs (receiver closeto)]
                      [args (amount)])
                     (assert (and (not (= (txn ApplicationID) 0))
@@ -165,6 +171,7 @@
                     1)]
 
              [(= proc ,asset-freeze)
+              (note "freeze asset holding")
               (with ([accs (account)]
                      [args (new-frozen)])
                     (assert (and (not (= (txn ApplicationID) 0))
