@@ -86,6 +86,24 @@
   (append (list (string-append "// " (if (null? prog) "" (first prog))))
           (stealc-lines '(/ 1 0))))
 
+(define [stealc-stateful-op? op]
+  (or (eq? op 'app-opted-in)
+      (eq? op 'app-read-global)
+      (eq? op 'app-read-local)
+      (eq? op 'app-write-global!)
+      (eq? op 'app-write-local!)))
+
+(define [stealc-lines-stateful prog]
+  (let ([op (cond [(eq? (first prog) 'app-opted-in) 'app_opted_in]
+                  [(eq? (first prog) 'app-read-global) 'app_read_global]
+                  [(eq? (first prog) 'app-read-local) 'app_read_local]
+                  [(eq? (first prog) 'app-write-global!) 'app_write_global]
+                  [(eq? (first prog) 'app-write-local!) 'app_write_local])])
+    (if (or (eq? (first prog) 'app-read-global)
+            (eq? (first prog) 'app-read-local))
+        (stealc-lines `(begin ,(cons op (rest prog)) (pop)))
+        (stealc-lines (cons op (rest prog))))))
+
 (define [stealc-lines-special prog]
   (cond [(eq? (first prog) 'if) (stealc-lines-if prog)]
         [(eq? (first prog) 'begin) (stealc-lines-begin (rest prog))]
@@ -93,6 +111,7 @@
         [(eq? (first prog) 'unless) (stealc-lines-unless (rest prog))]
         [(eq? (first prog) 'when) (stealc-lines-when (rest prog))]
         [(eq? (first prog) 'error) (stealc-lines-error (rest prog))]
+        [(stealc-stateful-op? (first prog)) (stealc-lines-stateful prog)]
         [else
          (let ([lines (append (stealc-lines-recur (rest prog))
                               (list (stealc-op (first prog))))])
@@ -110,6 +129,7 @@
         [(eq? op '=) "=="]
         [(eq? op 'and) "&&"]
         [(eq? op 'or) "||"]
+        [(eq? op 'not) "!"]
         [else (symbol->string op)]))
 
 (define [stealc-arg arg]
@@ -121,6 +141,7 @@
   (if (list? lines)
       (cond [(eq? (first prog) 'txn) (stealc-flatten-txn lines)]
             [(eq? (first prog) 'gtxn) (stealc-flatten-gtxn lines)]
+            [(eq? (first prog) 'txna) (stealc-flatten-txna lines)]
             [(eq? (first prog) 'addr) (stealc-flatten-addr lines)]
             [(eq? (first prog) 'global) (stealc-flatten-global lines)]
             [(eq? (first prog) 'byte) (stealc-flatten-byte lines)]
@@ -130,6 +151,9 @@
 
 (define [stealc-flatten-txn lines]
   (list (string-join (list (second lines) (first lines)) " ")))
+
+(define [stealc-flatten-txna lines]
+  (list (string-join (list (third lines) (first lines) (second lines)) " ")))
 
 (define [stealc-flatten-addr lines]
   (stealc-flatten-txn lines))

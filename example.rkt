@@ -81,9 +81,6 @@
 
 
 ;; TODO
-;; pop and discard top result of read operations
-;; txna flatten correctly
-;; not -> !
 ;; fast assertions (use bnz + err)
 
 ;; (displayln (app-schema asset-application))
