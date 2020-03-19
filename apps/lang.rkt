@@ -110,16 +110,17 @@
         [(string? ast) ast]
         [(symbol? ast) (app-rewrite-subst params global-vars local-vars local-args local-accs ast)]
         [(eq? (first ast) 'with)
-         (app-program-helper (third ast)
-                             params
-                             global-vars
-                             local-vars
-                             (append local-args (with-args ast))
-                             (append local-accs (with-accs ast)))]
+         (append '(begin)
+            (app-program-helper (rest (rest ast))
+                                params
+                                global-vars
+                                local-vars
+                                (append local-args (with-args ast))
+                                (append local-accs (with-accs ast))))]
         [(eq? (first ast) 'app-updates)
          (app-rewrite-updates params
-                             global-vars
-                             local-vars
+                              global-vars
+                              local-vars
                               local-args
                               local-accs
                               (second ast))]
