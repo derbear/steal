@@ -166,7 +166,7 @@
 
              [(= proc ,asset-freeze)
               (with ([accs (account)]
-                     [args (frozen)])
+                     [args (new-frozen)])
                     (begin
                       (unless (and (not (= (txn ApplicationID) 0))
                                    (= (txn NumAppArgs) 2)
@@ -174,7 +174,7 @@
                                    (= (txn OnCompletion) ,NoOp)
                                    (= (txn Sender) freezer))
                         (error "freeze: bad preconditions"))
-                      (app-updates ((lvars-of account (frozen frozen))))))]
+                      (app-updates ((lvars-of account (frozen new-frozen))))))]
 
              [else 0])))
 

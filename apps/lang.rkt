@@ -144,7 +144,7 @@
                   (if (not (null? acct))
                       `(app-write-local! ,(app-acc-rewrite (app-program-helper acct params gvars lvars args accs)))
                       '(app-write-local!)))
-              (list (symbol->string key)
+              (list (app-program-helper key params gvars lvars args accs)
                     (app-program-helper value params gvars lvars args accs))))))
 
 (define (maybe fn)
