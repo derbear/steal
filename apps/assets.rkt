@@ -20,7 +20,7 @@
 (define asset-freeze (asset-enum-next!))
 
 (define (valid-address? arg)
-  `(= (length ,arg) 32))
+  `(= (len ,arg) 32))
 
 (define (asset-valid-configure? key val)
   `(or (= ,val (global ZeroAddress))
@@ -28,8 +28,8 @@
 
 (define (asset-lget addr key)
   (if (equal? addr '(txn Sender))
-      `(app-read-local 0 ,key 0)
-      `(app-read-local-acct ,addr ,key 0)))
+      `(app-read-local 0 0 ,key)
+      `(app-read-local-acct ,addr 0 ,key)))
 
 (define (asset-lset! addr key val)
   (if (equal? addr '(txn Sender))
@@ -68,11 +68,12 @@
      ,(asset-put-in! rcv amt bypass)))
 
 (define asset-application
+  ;; TODO inject these into program text
   `((params (int supply)
             (int decimals)
             (int defaultfrozen)
             (int unitname)
-            (int assetname)
+            (string assetname)
             (string url)
             (byte base64 metadatahash)
             (addr creator))
@@ -101,7 +102,7 @@
                                       ,(valid-address? 'new-reserve)
                                       ,(valid-address? 'new-freezer)
                                       ,(valid-address? 'new-clawback))
-                                 (or (and (= (txn ApplicationID 0)) ;; create
+                                 (or (and (= (txn ApplicationID) 0) ;; create
                                           (= creator (txn Sender)))
                                      (and (not (= (txn ApplicationID) 0)) ;; reconfigure
                                           (= (txn Sender) (app-read-global manager))
@@ -110,7 +111,7 @@
                                           ,(asset-valid-configure? 'freezer 'new-freezer)
                                           ,(asset-valid-configure? 'clawback 'new-clawback))))
                       (error "configure: bad preconditions"))
-                    (when (= (txn ApplicationID 0))
+                    (when (= (txn ApplicationID) 0)
                       (app-write-global! cbalance (int TMPL_SUPPLY))
                       (app-write-global! cfrozen 0)) ;; TODO can optimize away
                     (app-updates ((gvars (manager new-manager)
@@ -131,7 +132,7 @@
                            (= (txn NumAppArgs) 1)
                            (= (txn NumAccounts) 0)
                            (= (txn OnCompletion) ,OptIn)
-                           (not (= (app-opted-in (txn Sender)) 1))
+                           (not (= (app-opted-in 0) 1)) ;; TODO 0 -> (txn Sender)
                            (not (= (txn Sender) creator)))
                 (error "open: bad preconditions"))
               ;; TODO can (conditionally) optimize block away
@@ -181,4 +182,4 @@
              [else 0])))
 
     (onclear (app-write-global! cbalance (+ (app-read-global cbalance)
-                                            (app-read-local 0 balance 0))))))
+                                            (app-read-local 0 0 balance))))))
