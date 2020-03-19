@@ -1,6 +1,7 @@
 #lang racket
 
 (require "lang.rkt")
+(require net/base64)
 
 (provide asset-application)
 
@@ -34,16 +35,16 @@
 
 (define (asset-frozen? addr)
   `(or (and (= ,addr creator)
-            (= (app-read-global "cfrozen") 1))
+            (= (app-read-global cfrozen) 1))
        (and (not (= ,addr creator))
-            (= ,(asset-lget addr "frozen") 1))))
+            (= ,(asset-lget addr 'frozen) 1))))
 
 ;; fails and returns 0 if addr is frozen unless bypass set
 (define (asset-modify! addr amt bypass op)
   (let ([ifblock
          `(if (= ,addr creator)
-           (app-write-global! "cbalance" (,op (app-read-global "cbalance") ,amt))
-           ,(asset-lset! addr "balance" `(,op ,(asset-lget addr "balance") ,amt)))])
+           (app-write-global! cbalance (,op (app-read-global cbalance) ,amt))
+           ,(asset-lset! addr 'balance `(,op ,(asset-lget addr 'balance) ,amt)))])
     (if bypass
         ifblock
         `(begin
@@ -91,7 +92,7 @@
 
              ;; TODO check type of proc, args...
              [(= proc ,asset-configure)
-              (with ([args (manager reserve freezer clawback)])
+              (with ([args (new-manager new-reserve new-freezer new-clawback)])
                     (begin
                       (unless (and (= (txn NumAppArgs) 5)
                                    (= (txn NumAccounts) 0)
@@ -99,26 +100,26 @@
                                    (or (and (= (txn ApplicationID 0)) ;; create
                                             (= creator (txn Sender)))
                                        (and (not (= (txn ApplicationID) 0)) ;; reconfigure
-                                            (= (txn Sender) (app-read-global "manager"))
-                                            ,(asset-valid-configure? "manager" 'manager)
-                                            ,(asset-valid-configure? "reserve" 'reserve)
-                                            ,(asset-valid-configure? "freezer" 'freezer)
-                                            ,(asset-valid-configure? "clawback" 'clawback))))
+                                            (= (txn Sender) (app-read-global manager))
+                                            ,(asset-valid-configure? 'manager 'new-manager)
+                                            ,(asset-valid-configure? 'reserve 'new-reserve)
+                                            ,(asset-valid-configure? 'freezer 'new-freezer)
+                                            ,(asset-valid-configure? 'clawback 'new-clawback))))
                         (error "configure: bad preconditions"))
                       (when (= (txn ApplicationID 0))
-                        (app-write-global! "cbalance" (int TMPL_SUPPLY)))
-                      (app-updates ((gvars (manager manager)
-                                           (reserve reserve)
-                                           (freezer freezer)
-                                           (clawback clawback))))))]
+                        (app-write-global! cbalance (int TMPL_SUPPLY)))
+                      (app-updates ((gvars (manager new-manager)
+                                           (reserve new-reserve)
+                                           (freezer new-freezer)
+                                           (clawback new-clawback))))))]
 
              [(= proc ,asset-delete)
               (and (not (= (txn ApplicationID) 0))
                    (= (txn NumAppArgs) 1)
                    (= (txn NumAccounts) 0)
                    (= (txn OnCompletion) ,DeleteApplication)
-                   (= (txn Sender) (app-read-global "manager"))
-                   (= supply (app-read-global "cbalance")))]
+                   (= (txn Sender) (app-read-global manager))
+                   (= supply (app-read-global cbalance)))]
 
              [(= proc ,asset-open)
               (begin
@@ -160,7 +161,7 @@
                         (error "transfer: bad preconditions"))
                       ,(asset-move! '(txn Sender) 'receiver 'amount #f))
                       (unless (= closeto (global ZeroAddress))
-                        ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) "balance") #f))
+                        ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) 'balance) #f))
                       1)]
 
              [(= proc ,asset-freeze)
@@ -177,5 +178,5 @@
 
              [else 0])))
 
-    (onclear (app-write-global! "cbalance" (+ (app-read-global "cbalance")
-                                              (app-read-local 0 "balance" 0))))))
+    (onclear (app-write-global! cbalance (+ (app-read-global cbalance)
+                                              (app-read-local 0 balance 0))))))
