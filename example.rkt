@@ -124,13 +124,10 @@
 ;; (displayln "schema:")
 ;; (pretty-print (app-schema asset-application))
 ;; (displayln "program:")
-;; (displayln (stealc (stealc-bind (app-program asset-application) args)))
+(displayln (stealc (stealc-bind (app-program asset-application) args)))
 ;; (displayln "clear program:")
-(displayln (stealc (stealc-bind (app-clear-program asset-application) args)))
+;; (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))
 ;; (display "\n")
-
-;; TODO
-;; fast assertions (use bnz + err)
 
 ;; (displayln (app-schema asset-application))
 ;; (pretty-print (stealc-flatten-begin (app-program asset-application)))

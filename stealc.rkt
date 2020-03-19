@@ -86,6 +86,13 @@
   (append (list (string-append "// " (if (null? prog) "" (first prog))))
           (stealc-lines '(/ 1 0))))
 
+(define [stealc-lines-assert prog]
+  (let ([after-label (gen-label! "assert")])
+    (append (stealc-lines (first prog))
+            (list (string-append "bnz " after-label))
+            (list "err")
+            (list (string-append after-label ":")))))
+
 (define [stealc-stateful-op? op]
   (or (eq? op 'app-opted-in)
       (eq? op 'app-read-global)
@@ -111,6 +118,7 @@
         [(eq? (first prog) 'unless) (stealc-lines-unless (rest prog))]
         [(eq? (first prog) 'when) (stealc-lines-when (rest prog))]
         [(eq? (first prog) 'error) (stealc-lines-error (rest prog))]
+        [(eq? (first prog) 'assert) (stealc-lines-assert (rest prog))]
         [(stealc-stateful-op? (first prog)) (stealc-lines-stateful prog)]
         [else
          (let ([lines (append (stealc-lines-recur (rest prog))

@@ -52,8 +52,7 @@
         ifblock
         `(begin
            (unless (= ,amt 0)
-             (when ,(asset-frozen? addr)
-               (error "cannot modify frozen asset"))
+             (assert (not ,(asset-frozen? addr))) ;; cannot modify frozen asset
              ,ifblock)))))
 
 (define (asset-take-out! addr amt bypass)
@@ -95,7 +94,7 @@
 
              [(= proc ,asset-configure)
               (with ([args (new-manager new-reserve new-freezer new-clawback)])
-                    (unless (and (= (txn NumAppArgs) 5)
+                    (assert (and (= (txn NumAppArgs) 5)
                                  (= (txn NumAccounts) 0)
                                  (= (txn OnCompletion) ,NoOp)
                                  (and ,(valid-address? 'new-manager)
@@ -109,8 +108,7 @@
                                           ,(asset-valid-configure? 'manager 'new-manager)
                                           ,(asset-valid-configure? 'reserve 'new-reserve)
                                           ,(asset-valid-configure? 'freezer 'new-freezer)
-                                          ,(asset-valid-configure? 'clawback 'new-clawback))))
-                      (error "configure: bad preconditions"))
+                                          ,(asset-valid-configure? 'clawback 'new-clawback)))))
                     (when (= (txn ApplicationID) 0)
                       (app-write-global! cbalance (int TMPL_SUPPLY))
                       (app-write-global! cfrozen 0)) ;; TODO can optimize away
@@ -128,13 +126,13 @@
                    (= supply (app-read-global cbalance)))]
 
              [(= proc ,asset-open)
-              (unless (and (not (= (txn ApplicationID) 0))
+              (assert (and (not (= (txn ApplicationID) 0))
                            (= (txn NumAppArgs) 1)
                            (= (txn NumAccounts) 0)
                            (= (txn OnCompletion) ,OptIn)
                            (not (= (app-opted-in 0) 1)) ;; TODO 0 -> (txn Sender)
-                           (not (= (txn Sender) creator)))
-                (error "open: bad preconditions"))
+                           (not (= (txn Sender) creator))))
+
               ;; TODO can (conditionally) optimize block away
               (app-updates ((lvars (balance 0)
                                    (frozen defaultfrozen))))]
@@ -142,12 +140,11 @@
              [(= proc ,asset-clawback)
               (with ([accs (sender receiver)]
                      [args (amount)])
-                    (unless (and (not (= (txn ApplicationID) 0))
+                    (assert (and (not (= (txn ApplicationID) 0))
                                  (= (txn NumAppArgs) 2)
                                  (= (txn NumAccounts) 2)
                                  (= (txn OnCompletion) ,NoOp)
-                                 (= (txn Sender) clawback))
-                      (error "clawback: bad preconditions"))
+                                 (= (txn Sender) clawback)))
                     ,(asset-move! 'sender 'receiver '(btoi amount) #t)
                     1)]
 
@@ -155,14 +152,13 @@
              [(= proc ,asset-transfer)
               (with ([accs (receiver closeto)]
                      [args (amount)])
-                    (unless (and (not (= (txn ApplicationID) 0))
+                    (assert (and (not (= (txn ApplicationID) 0))
                                  (= (txn NumAppArgs) 2)
                                  (= (txn NumAccounts) 2)
                                  (or (and (= (txn OnCompletion) ,NoOp)
                                           (= closeto (global ZeroAddress)))
                                      (and (= (txn OnCompletion) ,OptIn)
-                                          (not (= closeto (global ZeroAddress))))))
-                      (error "transfer: bad preconditions"))
+                                          (not (= closeto (global ZeroAddress)))))))
                     ,(asset-move! '(txn Sender) 'receiver '(btoi amount) #f)
                     (unless (= closeto (global ZeroAddress))
                       ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) 'balance) #f))
@@ -171,12 +167,11 @@
              [(= proc ,asset-freeze)
               (with ([accs (account)]
                      [args (new-frozen)])
-                    (unless (and (not (= (txn ApplicationID) 0))
+                    (assert (and (not (= (txn ApplicationID) 0))
                                  (= (txn NumAppArgs) 2)
                                  (= (txn NumAccounts) 1)
                                  (= (txn OnCompletion) ,NoOp)
-                                 (= (txn Sender) freezer))
-                      (error "freeze: bad preconditions"))
+                                 (= (txn Sender) freezer)))
                     (app-updates ((lvars-of account (frozen (btoi new-frozen))))))]
 
              [else 0])))
