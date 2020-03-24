@@ -24,21 +24,21 @@
 
 (define (asset-valid-configure? key val)
   `(or (= ,val (global ZeroAddress))
-       (not (= (app-read-global ,key) (global ZeroAddress)))))
+       (not (= (app-global-get ,key) (global ZeroAddress)))))
 
 (define (asset-lget addr key)
   (if (equal? addr '(txn Sender))
-      `(app-read-local 0 0 ,key)
-      `(app-read-local-acct ,addr 0 ,key)))
+      `(app-local-get 0 0 ,key)
+      `(app-local-get-acct ,addr 0 ,key)))
 
 (define (asset-lset! addr key val)
   (if (equal? addr '(txn Sender))
-      `(app-write-local! 0 ,key ,val)
-      `(app-write-local-acct! ,addr ,key ,val)))
+      `(app-local-put! 0 ,key ,val)
+      `(app-local-put-acct! ,addr ,key ,val)))
 
 (define (asset-frozen? addr)
   `(or (and (= ,addr creator)
-            (= (app-read-global cfrozen) 1))
+            (= (app-global-get cfrozen) 1))
        (and (not (= ,addr creator))
             (= ,(asset-lget addr 'frozen) 1))))
 
@@ -46,7 +46,7 @@
 (define (asset-modify! addr amt bypass op)
   (let ([ifblock
          `(if (= ,addr creator)
-              (app-write-global! cbalance (,op (app-read-global cbalance) ,amt))
+              (app-global-put! cbalance (,op (app-global-get cbalance) ,amt))
               ,(asset-lset! addr 'balance `(,op ,(asset-lget addr 'balance) ,amt)))])
     (if bypass
         ifblock
@@ -93,42 +93,42 @@
      (with ([args (proc)])
            (cond
 
-             [(= proc ,asset-configure)
+             [(= (btoi proc) ,asset-configure)
               (note "asset configuration")
               (with ([args (new-manager new-reserve new-freezer new-clawback)])
                     (assert (and (= (txn NumAppArgs) 5)
                                  (= (txn NumAccounts) 0)
-                                 (= (txn OnCompletion) ,NoOp)
-                                 (and ,(valid-address? 'new-manager)
-                                      ,(valid-address? 'new-reserve)
-                                      ,(valid-address? 'new-freezer)
-                                      ,(valid-address? 'new-clawback))
-                                 (or (and (= (txn ApplicationID) 0) ;; create
-                                          (= creator (txn Sender)))
-                                     (and (not (= (txn ApplicationID) 0)) ;; reconfigure
-                                          (= (txn Sender) (app-read-global manager))
-                                          ,(asset-valid-configure? 'manager 'new-manager)
-                                          ,(asset-valid-configure? 'reserve 'new-reserve)
-                                          ,(asset-valid-configure? 'freezer 'new-freezer)
-                                          ,(asset-valid-configure? 'clawback 'new-clawback)))))
+                                 (= (txn OnCompletion) ,NoOp)))
+                    (assert (and ,(valid-address? 'new-manager)
+                                 ,(valid-address? 'new-reserve)
+                                 ,(valid-address? 'new-freezer)
+                                 ,(valid-address? 'new-clawback)))
+
+                    (if (= (txn ApplicationID) 0)
+                        (assert (= creator (txn Sender))) ;; create
+                        (assert (and (= (txn Sender) (app-global-get manager)) ;; reconfigure
+                                     ,(asset-valid-configure? 'manager 'new-manager)
+                                     ,(asset-valid-configure? 'reserve 'new-reserve)
+                                     ,(asset-valid-configure? 'freezer 'new-freezer)
+                                     ,(asset-valid-configure? 'clawback 'new-clawback))))
+
                     (when (= (txn ApplicationID) 0)
-                      (app-write-global! cbalance (int TMPL_SUPPLY))
-                      (app-write-global! cfrozen 0)) ;; TODO can optimize away
+                      (app-global-put! cbalance (int TMPL_SUPPLY))
+                      (app-global-put! cfrozen 0)) ;; TODO can optimize away
                     (app-updates ((gvars (manager new-manager)
                                          (reserve new-reserve)
                                          (freezer new-freezer)
                                          (clawback new-clawback)))))]
 
-             [(= proc ,asset-delete)
-              (note "asset deletion")
+             [(= (btoi proc) ,asset-delete)
               (and (not (= (txn ApplicationID) 0))
                    (= (txn NumAppArgs) 1)
                    (= (txn NumAccounts) 0)
                    (= (txn OnCompletion) ,DeleteApplication)
-                   (= (txn Sender) (app-read-global manager))
-                   (= supply (app-read-global cbalance)))]
+                   (= (txn Sender) (app-global-get manager))
+                   (= supply (app-global-get cbalance)))]
 
-             [(= proc ,asset-open)
+             [(= (btoi proc) ,asset-open)
               (note "open asset holding")
               (assert (and (not (= (txn ApplicationID) 0))
                            (= (txn NumAppArgs) 1)
@@ -141,7 +141,7 @@
               (app-updates ((lvars (balance 0)
                                    (frozen defaultfrozen))))]
 
-             [(= proc ,asset-clawback)
+             [(= (btoi proc) ,asset-clawback)
               (note "clawback asset")
               (with ([accs (sender receiver)]
                      [args (amount)])
@@ -154,7 +154,7 @@
                     1)]
 
              ;; note: since creator cannot optin, creator cannot close
-             [(= proc ,asset-transfer)
+             [(= (btoi proc) ,asset-transfer)
               (note "transfer asset holding")
               (with ([accs (receiver closeto)]
                      [args (amount)])
@@ -170,7 +170,7 @@
                       ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) 'balance) #f))
                     1)]
 
-             [(= proc ,asset-freeze)
+             [(= (btoi proc) ,asset-freeze)
               (note "freeze asset holding")
               (with ([accs (account)]
                      [args (new-frozen)])
@@ -183,5 +183,5 @@
 
              [else 0])))
 
-    (onclear (app-write-global! cbalance (+ (app-read-global cbalance)
-                                            (app-read-local 0 0 balance))))))
+    (onclear (app-global-put! cbalance (+ (app-global-get cbalance)
+                                            (app-local-get 0 0 balance))))))

@@ -60,7 +60,8 @@
                    (stealc-lines-begin body)
                    (if first?
                        '()
-                       (list (string-append "bnz " end-label)))
+                       (list "int 1"
+                             (string-append "bnz " end-label)))
                    ))]))
 
 (define [stealc-lines-unless prog]
@@ -95,19 +96,19 @@
 
 (define [stealc-stateful-op? op]
   (or (eq? op 'app-opted-in)
-      (eq? op 'app-read-global)
-      (eq? op 'app-read-local)
-      (eq? op 'app-write-global!)
-      (eq? op 'app-write-local!)))
+      (eq? op 'app-global-get)
+      (eq? op 'app-local-get)
+      (eq? op 'app-global-put!)
+      (eq? op 'app-local-put!)))
 
 (define [stealc-lines-stateful prog]
   (let ([op (cond [(eq? (first prog) 'app-opted-in) 'app_opted_in]
-                  [(eq? (first prog) 'app-read-global) 'app_read_global]
-                  [(eq? (first prog) 'app-read-local) 'app_read_local]
-                  [(eq? (first prog) 'app-write-global!) 'app_write_global]
-                  [(eq? (first prog) 'app-write-local!) 'app_write_local])])
-    (if (or (eq? (first prog) 'app-read-global)
-            (eq? (first prog) 'app-read-local))
+                  [(eq? (first prog) 'app-global-get) 'app_global_get]
+                  [(eq? (first prog) 'app-local-get) 'app_local_get]
+                  [(eq? (first prog) 'app-global-put!) 'app_global_put]
+                  [(eq? (first prog) 'app-local-put!) 'app_local_put])])
+    (if (or (eq? (first prog) 'app-global-get)
+            (eq? (first prog) 'app-local-get))
         (stealc-lines `(begin ,(cons op (rest prog)) (pop)))
         (stealc-lines (cons op (rest prog))))))
 
@@ -210,15 +211,13 @@
       (string-append "int " line)))
 
 (define [stealc-bind prog args]
-  (if (and (list? prog) (not (null? prog)))
-      (cond [(null? (first prog)) prog]
-            [(list? (first prog)) (cons (stealc-bind (first prog) args) (stealc-bind (rest prog) args))]
-            [(symbol? (first prog))
-             (if (assoc (first prog) args)
-                 (cons (second (assoc (first prog) args)) (stealc-bind (rest prog) args))
-                 (cons (first prog) (stealc-bind (rest prog) args)))]
-            [else prog])
-      prog))
+  (cond [(symbol? prog)
+         (if (assoc prog args)
+             (second (assoc prog args))
+             prog)]
+        [(null? prog) prog]
+        [(list? prog) (cons (stealc-bind (first prog) args) (stealc-bind (rest prog) args))]
+        [else prog]))
 
 (define [dq l]
   (let ([lrev (reverse l)])

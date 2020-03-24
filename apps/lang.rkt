@@ -124,8 +124,8 @@
                               local-args
                               local-accs
                               (second ast))]
-        [(or (eq? (first ast) 'app-read-local-acct)
-             (eq? (first ast) 'app-write-local-acct!))
+        [(or (eq? (first ast) 'app-local-get-acct)
+             (eq? (first ast) 'app-local-put-acct!))
          (cons (string->symbol (string-replace (symbol->string (first ast))
                                                "-acct"
                                                ""))
@@ -141,10 +141,10 @@
     (let ([key (first ast)]
           [value (second ast)])
       (append (if global?
-                  '(app-write-global!)
+                  '(app-global-put!)
                   (if (not (null? acct))
-                      `(app-write-local! ,(app-acc-rewrite (app-program-helper acct params gvars lvars args accs)))
-                      '(app-write-local!)))
+                      `(app-local-put! ,(app-acc-rewrite (app-program-helper acct params gvars lvars args accs)))
+                      '(app-local-put! 0)))
               (list (app-program-helper key params gvars lvars args accs)
                     (app-program-helper value params gvars lvars args accs))))))
 
