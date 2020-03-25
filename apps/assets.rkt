@@ -60,7 +60,7 @@
 (define (asset-put-in! addr amt bypass)
   (asset-modify! addr amt bypass '+))
 
-;; fails and returns 0 if trying to take out or put into a frozen address unless bypass set
+;; fails and returns 0 if trying to take out or put into a frozen address unless bypass set or amt is 0
 (define (asset-move! snd rcv amt bypass)
   `(begin
      ,(asset-take-out! snd amt bypass)
@@ -97,8 +97,8 @@
               (with ([args (new-manager new-reserve new-freezer new-clawback)])
                     (assert (and (= (txn NumAppArgs) 5)
                                  (= (txn NumAccounts) 0)
-                                 (= (txn OnCompletion) ,NoOp)))
-                    (assert (and ,(valid-address? 'new-manager)
+                                 (= (txn OnCompletion) ,NoOp)
+                                 ,(valid-address? 'new-manager)
                                  ,(valid-address? 'new-reserve)
                                  ,(valid-address? 'new-freezer)
                                  ,(valid-address? 'new-clawback)))
@@ -120,6 +120,7 @@
                                          (clawback new-clawback)))))]
 
              [(= (btoi proc) ,asset-delete)
+              (note "asset deletion")
               (and (not (= (txn ApplicationID) 0))
                    (= (txn NumAppArgs) 1)
                    (= (txn NumAccounts) 0)
@@ -161,7 +162,7 @@
                                  (= (txn NumAccounts) 2)
                                  (or (and (= (txn OnCompletion) ,NoOp)
                                           (= closeto (global ZeroAddress)))
-                                     (and (= (txn OnCompletion) ,OptIn)
+                                     (and (= (txn OnCompletion) ,CloseOut)
                                           (not (= closeto (global ZeroAddress)))))))
                     ,(asset-move! '(txn Sender) 'receiver '(btoi amount) #f)
                     (unless (= closeto (global ZeroAddress))
