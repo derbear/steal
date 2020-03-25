@@ -133,7 +133,6 @@
                            (= (txn NumAppArgs) 1)
                            (= (txn NumAccounts) 0)
                            (= (txn OnCompletion) ,OptIn)
-                           (not (= (app-opted-in 0) 1)) ;; TODO 0 -> (txn Sender)
                            (not (= (txn Sender) creator))))
 
               ;; TODO can (conditionally) optimize block away
