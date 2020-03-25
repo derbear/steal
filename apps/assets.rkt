@@ -37,10 +37,9 @@
       `(app-local-put-acct! ,addr ,key ,val)))
 
 (define (asset-frozen? addr)
-  `(or (and (= ,addr creator)
-            (= (app-global-get cfrozen) 1))
-       (and (not (= ,addr creator))
-            (= ,(asset-lget addr 'frozen) 1))))
+  `(if (= ,addr creator)
+       (= (app-global-get cfrozen) 1)
+       (= ,(asset-lget addr 'frozen) 1)))
 
 ;; fails and returns 0 if addr is frozen unless bypass set
 (define (asset-modify! addr amt bypass op)
