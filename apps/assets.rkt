@@ -37,16 +37,16 @@
       `(app-local-put-acct! ,addr ,key ,val)))
 
 (define (asset-frozen? addr)
-  `(if (= ,addr creator)
-       (= (app-global-get cfrozen) 1)
-       (= ,(asset-lget addr 'frozen) 1)))
+  `(if (= ,addr (app-global-get cr))
+       (= (app-global-get fz) 1)
+       (= ,(asset-lget addr 'fz) 1)))
 
 ;; fails and returns 0 if addr is frozen unless bypass set
 (define (asset-modify! addr amt bypass op)
   (let ([ifblock
-         `(if (= ,addr creator)
-              (app-global-put! cbalance (,op (app-global-get cbalance) ,amt))
-              ,(asset-lset! addr 'balance `(,op ,(asset-lget addr 'balance) ,amt)))])
+         `(if (= ,addr (app-global-get cr))
+              (app-global-put! bl (,op (app-global-get bl) ,amt))
+              ,(asset-lset! addr 'bl `(,op ,(asset-lget addr 'bl) ,amt)))])
     (if bypass
         ifblock
         `(begin
@@ -67,120 +67,102 @@
      ,(asset-put-in! rcv amt bypass)))
 
 (define asset-application
-  ;; TODO inject these into program text
-  `((params (int supply)
-            (int decimals)
-            (int defaultfrozen)
+  ;; TODO inject these?
+  `((params (int decimals)
             (int unitname)
             (string assetname)
             (string url)
-            (byte base64 metadatahash)
-            (addr creator))
+            (byte base64 metadatahash))
 
-    (gvars (addr manager)
-           (addr reserve)
-           (addr freezer)
-           (addr clawback)
-           (int cbalance)
-           (int cfrozen))
+    ;; TODO allow preprocessor to substitute abbrevs.
+    (gvars (addr cr) ;; creator, const
+           (int tt)  ;; total supply, const
+           (int df)  ;; default frozen, const
+           (addr mn) ;; manager
+           (addr rv) ;; reserve
+           (addr fr) ;; frezer
+           (addr cl) ;; clawback
+           (int bl)  ;; balance, creator
+           (int fz)) ;; frozen, creator
 
-    (lvars (int balance)
-           (int frozen))
+    (lvars (int bl)  ;; balance
+           (int fz)) ;; frozen
 
     ;; TODO automatically compute numargs/numaccs from context
     (prog
-     (with ([args (proc)])
+     (if (= (txn NumAppArgs) 7)
+         (with ([args (new-mn new-rv new-fr new-cl init-cr init-tt init-df)])
+               (note "asset configuration")
+               (if (= (txn ApplicationID) 0)
+                   (begin
+                     (app-global-put! cr init-cr)
+                     (app-global-put! tt (btoi init-tt))
+                     (app-global-put! bl (btoi init-tt))
+                     (app-global-put! df (btoi init-df)))
+                   (assert (and (= (txn Sender) (app-global-get mn)) ;; reconfigure
+                                ,(asset-valid-configure? 'mn 'new-mn)
+                                ,(asset-valid-configure? 'rv 'new-rv)
+                                ,(asset-valid-configure? 'fr 'new-fr)
+                                ,(asset-valid-configure? 'cl 'new-cl))))
+               (app-global-put! mn new-mn)
+               (app-global-put! rv new-rv)
+               (app-global-put! fr new-fr)
+               (app-global-put! cl new-cl)
+               (and (= (txn NumAccounts) 0)
+                    (= (txn OnCompletion) ,NoOp)
+                    ,(valid-address? 'new-mn)
+                    ,(valid-address? 'new-rv)
+                    ,(valid-address? 'new-fr)
+                    ,(valid-address? 'new-cl)))
+         (begin
+           (assert (not (= (txn ApplicationID) 0)))
            (cond
+             [(= (txn NumAccounts) 0)
+              (note "asset deletion or opt-in")
 
-             [(= (btoi proc) ,asset-configure)
-              (note "asset configuration")
-              (with ([args (new-manager new-reserve new-freezer new-clawback)])
-                    (assert (and (= (txn NumAppArgs) 5)
-                                 (= (txn NumAccounts) 0)
-                                 (= (txn OnCompletion) ,NoOp)
-                                 ,(valid-address? 'new-manager)
-                                 ,(valid-address? 'new-reserve)
-                                 ,(valid-address? 'new-freezer)
-                                 ,(valid-address? 'new-clawback)))
+              (when (= (txn OnCompletion) ,OptIn)
+                (note "opting in to implicit zero bl")
+                (app-local-put! fz (app-global-get df)))
 
-                    (if (= (txn ApplicationID) 0)
-                        (assert (= creator (txn Sender))) ;; create
-                        (assert (and (= (txn Sender) (app-global-get manager)) ;; reconfigure
-                                     ,(asset-valid-configure? 'manager 'new-manager)
-                                     ,(asset-valid-configure? 'reserve 'new-reserve)
-                                     ,(asset-valid-configure? 'freezer 'new-freezer)
-                                     ,(asset-valid-configure? 'clawback 'new-clawback))))
+              (and (= (txn NumAppArgs) 0)
+                   (or (and (= (txn OnCompletion) ,DeleteApplication)
+                            (= (txn Sender) (app-global-get mn))
+                            (= (app-global-get tt) (app-global-get bl)))
+                       (and (= (txn OnCompletion) ,OptIn)
+                            (not (= (txn Sender) (app-global-get cr))))))]
 
-                    (when (= (txn ApplicationID) 0)
-                      (app-global-put! cbalance (int TMPL_SUPPLY))
-                      (app-global-put! cfrozen 0)) ;; TODO can optimize away
-                    (app-updates ((gvars (manager new-manager)
-                                         (reserve new-reserve)
-                                         (freezer new-freezer)
-                                         (clawback new-clawback)))))]
-
-             [(= (btoi proc) ,asset-delete)
-              (note "asset deletion")
-              (and (not (= (txn ApplicationID) 0))
-                   (= (txn NumAppArgs) 1)
-                   (= (txn NumAccounts) 0)
-                   (= (txn OnCompletion) ,DeleteApplication)
-                   (= (txn Sender) (app-global-get manager))
-                   (= supply (app-global-get cbalance)))]
-
-             [(= (btoi proc) ,asset-open)
-              (note "open asset holding")
-              (assert (and (not (= (txn ApplicationID) 0))
-                           (= (txn NumAppArgs) 1)
-                           (= (txn NumAccounts) 0)
-                           (= (txn OnCompletion) ,OptIn)
-                           (not (= (txn Sender) creator))))
-
-              ;; TODO can (conditionally) optimize block away
-              (app-updates ((lvars (balance 0)
-                                   (frozen defaultfrozen))))]
-
-             [(= (btoi proc) ,asset-clawback)
-              (note "clawback asset")
-              (with ([accs (sender receiver)]
-                     [args (amount)])
-                    (assert (and (not (= (txn ApplicationID) 0))
-                                 (= (txn NumAppArgs) 2)
-                                 (= (txn NumAccounts) 2)
-                                 (= (txn OnCompletion) ,NoOp)
-                                 (= (txn Sender) clawback)))
-                    ,(asset-move! 'sender 'receiver '(btoi amount) #t)
-                    1)]
-
-             ;; note: since creator cannot optin, creator cannot close
-             [(= (btoi proc) ,asset-transfer)
-              (note "transfer asset holding")
-              (with ([accs (receiver closeto)]
-                     [args (amount)])
-                    (assert (and (not (= (txn ApplicationID) 0))
-                                 (= (txn NumAppArgs) 2)
-                                 (= (txn NumAccounts) 2)
-                                 (or (and (= (txn OnCompletion) ,NoOp)
-                                          (= closeto (global ZeroAddress)))
-                                     (and (= (txn OnCompletion) ,CloseOut)
-                                          (not (= closeto (global ZeroAddress)))))))
-                    ,(asset-move! '(txn Sender) 'receiver '(btoi amount) #f)
-                    (unless (= closeto (global ZeroAddress))
-                      ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) 'balance) #f))
-                    1)]
-
-             [(= (btoi proc) ,asset-freeze)
+             [(= (txn NumAccounts) 1)
               (note "freeze asset holding")
               (with ([accs (account)]
-                     [args (new-frozen)])
-                    (assert (and (not (= (txn ApplicationID) 0))
-                                 (= (txn NumAppArgs) 2)
-                                 (= (txn NumAccounts) 1)
-                                 (= (txn OnCompletion) ,NoOp)
-                                 (= (txn Sender) freezer)))
-                    (app-updates ((lvars-of account (frozen (btoi new-frozen))))))]
+                     [args (new-fz)])
+                    (if (= account (app-global-get cr))
+                        (app-global-put! fz (btoi new-fz))
+                        (app-local-put-acct! account fz (btoi new-fz)))
+                    (and (= (txn NumAppArgs) 1)
+                         (= (txn OnCompletion) ,NoOp)
+                         (= (txn Sender) (app-global-get fr))))]
 
-             [else 0])))
+             [(= (txn NumAppArgs) 2)
+              (note "clawback asset")
+              (with ([accs (sender receiver)]
+                     [args (amount cl-ignored)])
+                    ,(asset-move! 'sender 'receiver '(btoi amount) #t)
+                    (and (= (txn NumAccounts) 2)
+                         (= (txn OnCompletion) ,NoOp)
+                         (= (txn Sender) (app-global-get cl))))]
 
-    (onclear (app-global-put! cbalance (+ (app-global-get cbalance)
-                                            (app-local-get 0 0 balance))))))
+             [else
+              (note "transfer asset")
+              (with ([accs (receiver closeto)]
+                     [args (amount)])
+                    ,(asset-move! '(txn Sender) 'receiver '(btoi amount) #f)
+                    (unless (= closeto (global ZeroAddress))
+                      ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) 'bl) #f))
+                    (and (= (txn NumAppArgs) 1)
+                         (= (txn NumAccounts) 2)
+                         (or (and (= (txn OnCompletion) ,NoOp)
+                                  (= closeto (global ZeroAddress)))
+                             (and (= (txn OnCompletion) ,CloseOut)
+                                  (not (= closeto (global ZeroAddress)))))))]))))
+
+    (onclear (app-global-put! bl (+ (app-global-get bl) (app-local-get 0 0 bl))))))
