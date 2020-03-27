@@ -155,6 +155,8 @@
             [(eq? (first prog) 'global) (stealc-flatten-global lines)]
             [(eq? (first prog) 'byte) (stealc-flatten-byte lines)]
             [(eq? (first prog) 'int) (stealc-flatten-int lines)]
+            [(eq? (first prog) 'load) (stealc-flatten-load lines)]
+            [(eq? (first prog) 'store!) (stealc-flatten-store lines)]
             [(eq? (first prog) 'note) (stealc-flatten-note lines)]
             [else lines])
       lines))
@@ -179,6 +181,13 @@
 
 (define [stealc-flatten-gtxn lines]
   (stealc-flatten-byte lines))
+
+(define [stealc-flatten-load lines]
+  (stealc-flatten-txn lines))
+
+(define [stealc-flatten-store lines]
+  (append (second (dq (rest lines)))
+          (list (string-join (list "store" (first lines)) " "))))
 
 (define [stealc-flatten-note lines]
   (list (string-join (list "//" (first lines)))))

@@ -5,19 +5,12 @@
 
 (provide asset-application)
 
-(define asset-enum 0)
-(define (asset-enum-next!)
+(define next-scratch 0)
+(define (new-scratch!)
   (begin
-    (let ([c asset-enum])
-      (set! asset-enum (+ c 1))
+    (let ([c next-scratch])
+      (set! next-scratch (+ c 1))
       c)))
-
-(define asset-configure (asset-enum-next!))
-(define asset-delete (asset-enum-next!))
-(define asset-open (asset-enum-next!))
-(define asset-clawback (asset-enum-next!))
-(define asset-transfer (asset-enum-next!))
-(define asset-freeze (asset-enum-next!))
 
 (define (valid-address? arg)
   `(= (len ,arg) 32))
@@ -62,9 +55,11 @@
 
 ;; fails and returns 0 if trying to take out or put into a frozen address unless bypass set or amt is 0
 (define (asset-move! snd rcv amt bypass)
-  `(begin
-     ,(asset-take-out! snd amt bypass)
-     ,(asset-put-in! rcv amt bypass)))
+  (let ([mem (new-scratch!)])
+    `(begin
+       (store! ,mem ,amt)
+       ,(asset-take-out! snd `(load ,mem) bypass)
+       ,(asset-put-in! rcv `(load ,mem) bypass))))
 
 (define asset-application
   ;; TODO inject these?
@@ -122,7 +117,7 @@
 
               (when (= (txn OnCompletion) ,OptIn)
                 (note "opting in to implicit zero bl")
-                (app-local-put! fz (app-global-get df)))
+                (app-local-put! 0 fz (app-global-get df)))
 
               (and (= (txn NumAppArgs) 0)
                    (or (and (= (txn OnCompletion) ,DeleteApplication)
@@ -160,9 +155,10 @@
                       ,(asset-move! '(txn Sender) 'closeto (asset-lget '(txn Sender) 'bl) #f))
                     (and (= (txn NumAppArgs) 1)
                          (= (txn NumAccounts) 2)
-                         (or (and (= (txn OnCompletion) ,NoOp)
-                                  (= closeto (global ZeroAddress)))
+                         (if (= (txn OnCompletion) ,NoOp)
+                             (= closeto (global ZeroAddress))
                              (and (= (txn OnCompletion) ,CloseOut)
+                                  (= ,(asset-lget '(txn Sender) 'bl) 0)
                                   (not (= closeto (global ZeroAddress)))))))]))))
 
     (onclear (app-global-put! bl (+ (app-global-get bl) (app-local-get 0 0 bl))))))
