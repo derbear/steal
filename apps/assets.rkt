@@ -161,4 +161,6 @@
                                   (= ,(asset-lget '(txn Sender) 'bl) 0)
                                   (not (= closeto (global ZeroAddress)))))))]))))
 
-    (onclear (app-global-put! bl (+ (app-global-get bl) (app-local-get 0 0 bl))))))
+    (onclear (begin
+               (app-global-put! bl (+ (app-global-get bl) (app-local-get 0 0 bl)))
+               1))))
