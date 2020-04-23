@@ -17,12 +17,12 @@
 
 (define (asset-valid-configure? key val)
   `(or (= ,val (global ZeroAddress))
-       (not (= (app-global-get ,key) (global ZeroAddress)))))
+       (not (= (app-global-gets ,key) (global ZeroAddress)))))
 
 (define (asset-lget addr key)
   (if (equal? addr '(txn Sender))
-      `(app-local-get 0 0 ,key)
-      `(app-local-get-acct ,addr 0 ,key)))
+      `(app-local-gets 0 ,key)
+      `(app-local-gets-acct ,addr ,key)))
 
 (define (asset-lset! addr key val)
   (if (equal? addr '(txn Sender))
@@ -30,15 +30,15 @@
       `(app-local-put-acct! ,addr ,key ,val)))
 
 (define (asset-frozen? addr)
-  `(if (= ,addr (app-global-get cr))
-       (= (app-global-get fz) 1)
+  `(if (= ,addr (app-global-gets cr))
+       (= (app-global-gets fz) 1)
        (= ,(asset-lget addr 'fz) 1)))
 
 ;; fails and returns 0 if addr is frozen unless bypass set
 (define (asset-modify! addr amt bypass op)
   (let ([ifblock
-         `(if (= ,addr (app-global-get cr))
-              (app-global-put! bl (,op (app-global-get bl) ,amt))
+         `(if (= ,addr (app-global-gets cr))
+              (app-global-put! bl (,op (app-global-gets bl) ,amt))
               ,(asset-lset! addr 'bl `(,op ,(asset-lget addr 'bl) ,amt)))])
     (if bypass
         ifblock
@@ -94,7 +94,7 @@
                      (app-global-put! tt (btoi init-tt))
                      (app-global-put! bl (btoi init-tt))
                      (app-global-put! df (btoi init-df)))
-                   (assert (and (= (txn Sender) (app-global-get mn)) ;; reconfigure
+                   (assert (and (= (txn Sender) (app-global-gets mn)) ;; reconfigure
                                 ,(asset-valid-configure? 'mn 'new-mn)
                                 ,(asset-valid-configure? 'rv 'new-rv)
                                 ,(asset-valid-configure? 'fr 'new-fr)
@@ -117,25 +117,25 @@
 
               (when (= (txn OnCompletion) ,OptIn)
                 (note "opting in to implicit zero bl")
-                (app-local-put! 0 fz (app-global-get df)))
+                (app-local-put! 0 fz (app-global-gets df)))
 
               (and (= (txn NumAppArgs) 0)
                    (or (and (= (txn OnCompletion) ,DeleteApplication)
-                            (= (txn Sender) (app-global-get mn))
-                            (= (app-global-get tt) (app-global-get bl)))
+                            (= (txn Sender) (app-global-gets mn))
+                            (= (app-global-gets tt) (app-global-gets bl)))
                        (and (= (txn OnCompletion) ,OptIn)
-                            (not (= (txn Sender) (app-global-get cr))))))]
+                            (not (= (txn Sender) (app-global-gets cr))))))]
 
              [(= (txn NumAccounts) 1)
               (note "freeze asset holding")
               (with ([accs (account)]
                      [args (new-fz)])
-                    (if (= account (app-global-get cr))
+                    (if (= account (app-global-gets cr))
                         (app-global-put! fz (btoi new-fz))
                         (app-local-put-acct! account fz (btoi new-fz)))
                     (and (= (txn NumAppArgs) 1)
                          (= (txn OnCompletion) ,NoOp)
-                         (= (txn Sender) (app-global-get fr))))]
+                         (= (txn Sender) (app-global-gets fr))))]
 
              [(= (txn NumAppArgs) 2)
               (note "clawback asset")
@@ -144,7 +144,7 @@
                     ,(asset-move! 'sender 'receiver '(btoi amount) #t)
                     (and (= (txn NumAccounts) 2)
                          (= (txn OnCompletion) ,NoOp)
-                         (= (txn Sender) (app-global-get cl))))]
+                         (= (txn Sender) (app-global-gets cl))))]
 
              [else
               (note "transfer asset")
@@ -162,5 +162,5 @@
                                   (not (= closeto (global ZeroAddress)))))))]))))
 
     (onclear (begin
-               (app-global-put! bl (+ (app-global-get bl) (app-local-get 0 0 bl)))
+               (app-global-put! bl (+ (app-global-gets bl) (app-local-gets 0 bl)))
                1))))

@@ -94,23 +94,20 @@
             (list "err")
             (list (string-append after-label ":")))))
 
+(define stealc-stateful-ops
+  '((app-opted-in app_opted_in)
+    (app-global-get app_global_get)
+    (app-global-gets app_global_gets)
+    (app-local-get app_local_get)
+    (app-local-gets app_local_gets)
+    (app-global-put! app_global_put)
+    (app-local-put! app_local_put)))
+
 (define [stealc-stateful-op? op]
-  (or (eq? op 'app-opted-in)
-      (eq? op 'app-global-get)
-      (eq? op 'app-local-get)
-      (eq? op 'app-global-put!)
-      (eq? op 'app-local-put!)))
+  (assoc op stealc-stateful-ops))
 
 (define [stealc-lines-stateful prog]
-  (let ([op (cond [(eq? (first prog) 'app-opted-in) 'app_opted_in]
-                  [(eq? (first prog) 'app-global-get) 'app_global_get]
-                  [(eq? (first prog) 'app-local-get) 'app_local_get]
-                  [(eq? (first prog) 'app-global-put!) 'app_global_put]
-                  [(eq? (first prog) 'app-local-put!) 'app_local_put])])
-    (if (or (eq? (first prog) 'app-global-get)
-            (eq? (first prog) 'app-local-get))
-        (stealc-lines `(begin ,(cons op (rest prog)) (pop)))
-        (stealc-lines (cons op (rest prog))))))
+  (stealc-lines (cons (second (assoc (first prog) stealc-stateful-ops)) (rest prog))))
 
 (define [stealc-lines-special prog]
   (cond [(eq? (first prog) 'if) (stealc-lines-if prog)]
