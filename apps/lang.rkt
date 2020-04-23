@@ -27,7 +27,11 @@
 (define UpdateApplication (app-on-completion-enum-next!))
 (define DeleteApplication (app-on-completion-enum-next!))
 
-(define (app-get sym app) (rest (assoc sym app)))
+(define (app-get sym app)
+  (if (assoc sym app)
+      (rest (assoc sym app))
+      '()))
+
 (define (app-params app) (app-get 'params app))
 (define (app-gvars app) (app-get 'gvars app))
 (define (app-lvars app) (app-get 'lvars app))

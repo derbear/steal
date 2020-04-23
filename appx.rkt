@@ -8,6 +8,7 @@
 
 (require "apps/lang.rkt")
 (require "apps/assets.rkt")
+(require "apps/sectok.rkt")
 
 (require racket/pretty)
 
@@ -52,25 +53,34 @@
                    (stealc-flatten-begin (cons 'begin flattened))))
              (cons (stealc-flatten-begin (first ast)) (stealc-flatten-begin (rest ast))))]))
 
-;; (display "\n")
-;; (displayln "::::::::::::::::::")
-;; (displayln "::::: assets :::::")
-;; (displayln "::::::::::::::::::")
-;; (display "\n")
-;; (displayln "schema:")
+(displayln (stealc (app-program security-token-application)))
+(pretty-print (app-program security-token-application))
 
-(cond [(show-prog) (displayln (stealc (stealc-bind (app-program asset-application) args)))]
-      [(show-clear) (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))]
-      [else (pretty-print (app-schema asset-application))])
+;; (cond [(show-prog) (displayln (stealc (stealc-bind (app-program asset-application) args)))]
+;;       [(show-clear) (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))]
+;;       [else (pretty-print (app-schema asset-application))])
 
-;; (pretty-print (app-schema asset-application))
-;; (displayln "program:")
+;; ;; (display "\n")
+;; ;; (displayln "::::::::::::::::::")
+;; ;; (displayln "::::: assets :::::")
+;; ;; (displayln "::::::::::::::::::")
+;; ;; (display "\n")
+;; ;; (displayln "schema:")
 
-;; (displayln "clear program:")
-;; (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))
-;; (display "\n")
+;; (displayln (stealc (stealc-bind (app-program asset-application) args)))
 
-;; (displayln (app-schema asset-application))
-;; (pretty-print (stealc-flatten-begin (app-program asset-application)))
+;; (cond [(show-prog) (displayln (stealc (stealc-bind (app-program asset-application) args)))]
+;;       [(show-clear) (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))]
+;;       [else (pretty-print (app-schema asset-application))])
 
-;; (pretty-print (app-clear-program asset-application))
+;; ;; (pretty-print (app-schema asset-application))
+;; ;; (displayln "program:")
+
+;; ;; (displayln "clear program:")
+;; ;; (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))
+;; ;; (display "\n")
+
+;; ;; (displayln (app-schema asset-application))
+;; ;; (pretty-print (stealc-flatten-begin (app-program asset-application)))
+
+;; ;; (pretty-print (app-clear-program asset-application))

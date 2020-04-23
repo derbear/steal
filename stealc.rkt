@@ -6,12 +6,17 @@
 (provide stealc-bind)
 
 (define [stealc prog]
-  (string-join (map stealc-postprocess (stealc-lines (stealc-preprocess prog))) "\n"))
+  (string-join (stealc-postprocess (stealc-lines (stealc-preprocess prog))) "\n"))
 
 (define [stealc-lines prog]
   (if (list? prog)
-      (stealc-lines-special prog)
-      (list (stealc-arg prog))))
+      (stealc-lines-list prog)
+      (list (stealc-atom prog))))
+
+(define [stealc-atom arg]
+  (cond [(symbol? arg) (symbol->string arg)]
+        [(number? arg) (number->string arg)]
+        [else arg]))
 
 (define next-label-number 0)
 (define (gen-label! pfx)
@@ -109,7 +114,7 @@
 (define [stealc-lines-stateful prog]
   (stealc-lines (cons (second (assoc (first prog) stealc-stateful-ops)) (rest prog))))
 
-(define [stealc-lines-special prog]
+(define [stealc-lines-list prog]
   (cond [(eq? (first prog) 'if) (stealc-lines-if prog)]
         [(eq? (first prog) 'begin) (stealc-lines-begin (rest prog))]
         [(eq? (first prog) 'cond) (stealc-lines-cond (rest prog))]
@@ -120,17 +125,17 @@
         [(stealc-stateful-op? (first prog)) (stealc-lines-stateful prog)]
         [else
          (let ([lines (append (stealc-lines-recur (rest prog))
-                              (list (stealc-op (first prog))))])
-           (stealc-flatten prog lines))]))
+                              (list (stealc-op->string (first prog))))])
+           (stealc-reorder prog lines))]))
 
 (define [stealc-lines-recur prog]
   (cond [(null? prog) prog]
         [(list? prog)
          (append (stealc-lines (first prog))
                  (stealc-lines-recur (rest prog)))]
-        [else (list (stealc-arg prog))]))
+        [else (list (stealc-atom prog))]))
 
-(define [stealc-op op]
+(define [stealc-op->string op]
   (cond [(eq? op '||) "||"]
         [(eq? op '=) "=="]
         [(eq? op 'and) "&&"]
@@ -138,70 +143,64 @@
         [(eq? op 'not) "!"]
         [else (symbol->string op)]))
 
-(define [stealc-arg arg]
-  (cond [(symbol? arg) (symbol->string arg)]
-        [(number? arg) (number->string arg)]
-        [else arg]))
-
-(define [stealc-flatten prog lines]
-  (if (list? lines)
-      (cond [(eq? (first prog) 'txn) (stealc-flatten-txn lines)]
-            [(eq? (first prog) 'gtxn) (stealc-flatten-gtxn lines)]
-            [(eq? (first prog) 'txna) (stealc-flatten-txna lines)]
-            [(eq? (first prog) 'addr) (stealc-flatten-addr lines)]
-            [(eq? (first prog) 'global) (stealc-flatten-global lines)]
-            [(eq? (first prog) 'byte) (stealc-flatten-byte lines)]
-            [(eq? (first prog) 'int) (stealc-flatten-int lines)]
-            [(eq? (first prog) 'load) (stealc-flatten-load lines)]
-            [(eq? (first prog) 'store!) (stealc-flatten-store lines)]
-            [(eq? (first prog) 'note) (stealc-flatten-note lines)]
-            [else lines])
+(define [stealc-reorder prog lines]
+  (if (and (list? lines) (assoc (first prog) stealc-reorder-ops))
+      ((second (assoc (first prog) stealc-reorder-ops)) lines)
       lines))
 
-(define [stealc-flatten-txn lines]
+(define [stealc-reorder-txn lines]
   (list (string-join (list (second lines) (first lines)) " ")))
 
-(define [stealc-flatten-txna lines]
+(define [stealc-reorder-txna lines]
   (list (string-join (list (third lines) (first lines) (second lines)) " ")))
 
-(define [stealc-flatten-addr lines]
-  (stealc-flatten-txn lines))
+(define [stealc-reorder-addr lines]
+  (stealc-reorder-txn lines))
 
-(define [stealc-flatten-global lines]
-  (stealc-flatten-txn lines))
+(define [stealc-reorder-global lines]
+  (stealc-reorder-txn lines))
 
-(define [stealc-flatten-int lines]
-  (stealc-flatten-txn lines))
+(define [stealc-reorder-int lines]
+  (stealc-reorder-txn lines))
 
-(define [stealc-flatten-byte lines]
+(define [stealc-reorder-byte lines]
   (list (string-join (list (third lines) (first lines) (second lines)) " ")))
 
-(define [stealc-flatten-gtxn lines]
-  (stealc-flatten-byte lines))
+(define [stealc-reorder-gtxn lines]
+  (stealc-reorder-byte lines))
 
-(define [stealc-flatten-load lines]
-  (stealc-flatten-txn lines))
+(define [stealc-reorder-load lines]
+  (stealc-reorder-txn lines))
 
-(define [stealc-flatten-store lines]
+(define [stealc-reorder-store lines]
   (append (second (dq (rest lines)))
           (list (string-join (list "store" (first lines)) " "))))
 
-(define [stealc-flatten-note lines]
+(define [stealc-reorder-note lines]
   (list (string-join (list "//" (first lines)))))
 
-(define [stealc-preprocess prog]
-  (if (list? prog)
-      (stealc-preprocess-expand prog)
-      prog))
+(define stealc-reorder-ops
+  `((txn ,stealc-reorder-txn)
+    (gtxn ,stealc-reorder-gtxn)
+    (txna ,stealc-reorder-txna)
+    (addr ,stealc-reorder-addr)
+    (global ,stealc-reorder-global)
+    (byte ,stealc-reorder-byte)
+    (int ,stealc-reorder-int)
+    (load ,stealc-reorder-load)
+    (store! ,stealc-reorder-store)
+    (note ,stealc-reorder-note)))
 
-(define [stealc-preprocess-expand prog]
-  (if (null? prog)
-      prog
-      (cond [(eq? (first prog) '&&) (stealc-preprocess-distribute prog)]
-            [(eq? (first prog) '||) (stealc-preprocess-distribute prog)]
-            [(eq? (first prog) 'and) (stealc-preprocess-distribute prog)]
-            [(eq? (first prog) 'or) (stealc-preprocess-distribute prog)]
-            [else (cons (stealc-preprocess (first prog)) (map stealc-preprocess (rest prog)))])))
+;; preprocess
+
+(define stealc-vararg-ops
+  '(&& || and or + *))
+
+(define [stealc-preprocess prog]
+  (cond [(not (list? prog)) prog]
+        [(null? prog) prog]
+        [(member (first prog) stealc-vararg-ops) (stealc-preprocess-distribute prog)]
+        [else (cons (stealc-preprocess (first prog)) (map stealc-preprocess (rest prog)))]))
 
 (define [stealc-preprocess-distribute prog]
   (cond [(null? (rest prog)) (rest prog)]
@@ -211,10 +210,20 @@
                       (stealc-preprocess (second expr))
                       (stealc-preprocess (first expr))))]))
 
-(define [stealc-postprocess line]
+(define [dq l]
+  (let ([lrev (reverse l)])
+    (list (first lrev) (reverse (rest lrev)))))
+
+;; postprocess
+
+(define [stealc-postprocess-line line]
   (if (eq? (string->number line) #f)
       line
       (string-append "int " line)))
+
+(define [stealc-postprocess lines] (map stealc-postprocess-line lines))
+
+;; bind
 
 (define [stealc-bind prog args]
   (cond [(symbol? prog)
@@ -224,7 +233,3 @@
         [(null? prog) prog]
         [(list? prog) (cons (stealc-bind (first prog) args) (stealc-bind (rest prog) args))]
         [else prog]))
-
-(define [dq l]
-  (let ([lrev (reverse l)])
-    (list (first lrev) (reverse (rest lrev)))))
