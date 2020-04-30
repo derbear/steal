@@ -1,6 +1,6 @@
 #lang racket
 
-;; printf "\nschema\n" && racket appx.rkt && printf "\nclear\n" && racket appx.rkt -c | tee appclear.teal && printf "\napproval\n" && racket appx.rkt -p | tee appprog.teal
+;; printf "\nschema\n" && racket appx.rkt sectok && printf "\nclear\n" && racket appx.rkt -c sectok | tee sectok_clear.teal && printf "\napproval\n" && racket appx.rkt -p sectok | tee sectok_approve.teal
 
 (require racket/cmdline)
 
@@ -15,13 +15,15 @@
 (define show-prog (make-parameter #f))
 (define show-clear (make-parameter #f))
 
-(define cmd-options
+(define app-name
   (command-line
    #:once-any
    [("-p" "--prog") "Show approval program"
                     (show-prog #t)]
    [("-c" "--clr") "Show clear program"
-                   (show-clear #t)]))
+                   (show-clear #t)]
+   #:args (app)
+   app))
 
 (define args
   '((TMPL_CREATOR "Q732YJSTN4PVI4IHJ7DZTMFYM3MKXRFWBNJ3X7JKKAW2GH4O5KTLVA3S6E")
@@ -53,12 +55,19 @@
                    (stealc-flatten-begin (cons 'begin flattened))))
              (cons (stealc-flatten-begin (first ast)) (stealc-flatten-begin (rest ast))))]))
 
-(displayln (stealc (app-program security-token-application)))
-(pretty-print (app-program security-token-application))
-
-;; (cond [(show-prog) (displayln (stealc (stealc-bind (app-program asset-application) args)))]
-;;       [(show-clear) (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))]
-;;       [else (pretty-print (app-schema asset-application))])
+(case app-name
+  [("asa" "asset" "assets")
+   (cond [(show-prog) (displayln (stealc (stealc-bind (app-program asset-application) args)))]
+         [(show-clear) (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))]
+         [else (pretty-print (app-schema asset-application))])]
+  [("sectok" "security-token" "security-tokens")
+   (cond [(show-prog) (displayln (stealc (stealc-bind (app-program security-token-application) args)))]
+         [(show-clear) (displayln (stealc (stealc-bind (app-clear-program security-token-application) args)))]
+         [else (pretty-print (app-schema security-token-application))])]
+  [else (raise (format "unknown app name ~a" app-name))])
+   
+;; (displayln (stealc (app-program security-token-application)))
+;; (pretty-print (app-program security-token-application))
 
 ;; ;; (display "\n")
 ;; ;; (displayln "::::::::::::::::::")

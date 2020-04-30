@@ -31,6 +31,10 @@
   (if (assoc sym app)
       (rest (assoc sym app))
       '()))
+(define (app-get-num sym app)
+  (if (assoc sym app)
+      (first (rest (assoc sym app)))
+      0))
 
 (define (app-params app) (app-get 'params app))
 (define (app-gvars app) (app-get 'gvars app))
@@ -44,11 +48,16 @@
 (define (app-blobs vars) (length (filter app-blob? vars)))
 (define (app-ints vars) (length (filter app-int? vars)))
 
+(define (app-gvars-varint app) (app-get-num 'gvars-varint app))
+(define (app-gvars-varblob app) (app-get-num 'gvars-varblob app))
+(define (app-lvars-varint app) (app-get-num 'lvars-varint app))
+(define (app-lvars-varblob app) (app-get-num 'lvars-varblob app))
+
 (define (app-schema app)
-  `((global-state-blobs ,(app-blobs (app-gvars app)))
-    (global-state-ints ,(app-ints (app-gvars app)))
-    (local-state-blobs ,(app-blobs (app-lvars app)))
-    (local-state-ints ,(app-ints (app-lvars app)))))
+  `((global-state-blobs ,(+ (app-gvars-varblob app) (app-blobs (app-gvars app))))
+    (global-state-ints ,(+ (app-gvars-varint app) (app-ints (app-gvars app))))
+    (local-state-blobs ,(+ (app-lvars-varblob app) (app-blobs (app-lvars app))))
+    (local-state-ints ,(+ (app-lvars-varint app) (app-ints (app-lvars app))))))
 
 (define (app-program app) (app-program-helper (first (app-prog app)) (app-params app) (app-gvars app) (app-lvars app) '() '()))
 (define (app-clear-program app) (app-program-helper (first (app-onclear app)) (app-params app) (app-gvars app) (app-lvars app) '() '()))

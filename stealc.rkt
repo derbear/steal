@@ -106,7 +106,9 @@
     (app-local-get app_local_get)
     (app-local-gets app_local_gets)
     (app-global-put! app_global_put)
-    (app-local-put! app_local_put)))
+    (app-local-put! app_local_put)
+    (app-global-del! app_global_del)
+    (app-local-del! app_local_del)))
 
 (define [stealc-stateful-op? op]
   (assoc op stealc-stateful-ops))
@@ -163,6 +165,9 @@
 (define [stealc-reorder-int lines]
   (stealc-reorder-txn lines))
 
+(define [stealc-reorder-string lines]
+  (list (string-join (list (second lines) (first lines)) " ")))
+
 (define [stealc-reorder-byte lines]
   (list (string-join (list (third lines) (first lines) (second lines)) " ")))
 
@@ -187,6 +192,7 @@
     (global ,stealc-reorder-global)
     (byte ,stealc-reorder-byte)
     (int ,stealc-reorder-int)
+    (string ,stealc-reorder-string)
     (load ,stealc-reorder-load)
     (store! ,stealc-reorder-store)
     (note ,stealc-reorder-note)))
