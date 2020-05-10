@@ -1,8 +1,12 @@
 #lang racket
 
+(require racket/trace)
+
+(require json)
 (require net/base64)
 
 (provide app-schema)
+(provide app-header)
 (provide app-program)
 (provide app-clear-program)
 
@@ -35,14 +39,17 @@
   (if (assoc sym app)
       (first (rest (assoc sym app)))
       0))
+(define (app-vars sym app)
+  (app-get sym app))
 
 (define (app-params app) (app-get 'params app))
-(define (app-gvars app) (app-get 'gvars app))
-(define (app-lvars app) (app-get 'lvars app))
 (define (app-prog app) (app-get 'prog app))
 (define (app-onclear app) (app-get 'onclear app))
 
-(define (app-int? var) (eq? (first var) 'int))
+(define (app-gvars app) (app-vars 'gvars app))
+(define (app-lvars app) (app-vars 'lvars app))
+
+(define (app-int? var) (eq? (first (second var)) 'int))
 (define (app-blob? var) (not (app-int? var)))
 
 (define (app-blobs vars) (length (filter app-blob? vars)))
@@ -59,6 +66,69 @@
     (local-state-blobs ,(+ (app-lvars-varblob app) (app-blobs (app-lvars app))))
     (local-state-ints ,(+ (app-lvars-varint app) (app-ints (app-lvars app))))))
 
+(define (app-header app)
+  ;; (pretty-print (app-header-jexpr app))
+  ;; (app-header-jexpr app))
+  (jsexpr->string (app-header-jexpr app)))
+
+(define (app-header-jexpr app)
+  (hash 'execute (app-header-execute app)
+        'query (app-header-queries app)))
+
+(define (app-header-execute app)
+  (make-immutable-hash (map (app-header-proc (app-get 'create-procs app)) (app-get 'procs app))))
+
+(define (app-header-proc create-procs)
+  (lambda (proc)
+    (cons (first proc)
+          (apply hash (append (list 'on-completion (symbol->string (second proc))
+                                    'help (third proc)
+                                    'create (not (not (member (first proc) create-procs))))
+                              (app-header-args (rest (rest (rest proc)))))))))
+
+(define (app-header-args proc)
+  (if (null? proc)
+      '(args () accounts () foreign ())
+      (let ([rem (app-header-args (rest proc))])
+        (if (null? (first (first proc)))
+            (app-header-arg rem (rest (first proc)) #t)
+            (app-header-arg rem (first proc) #f)))))
+
+(define (app-header-arg rem arg pseudo)
+  (let ([rem-args (second rem)]
+        [rem-accounts (fourth rem)]
+        [rem-foreign (sixth rem)])
+    (case (first arg)
+      [(account)
+       (list 'args rem-args
+             'accounts
+             (cons (hash 'name (symbol->string (second arg))
+                         'help (if (>= (length arg) 3) (third arg) "")
+                         'pseudo pseudo)
+                   rem-accounts)
+             'foreign rem-foreign)]
+      [(foreign) 'TODO]
+      [else
+       (list 'args
+             (cons (hash 'name (symbol->string (second arg))
+                         'kind (symbol->string (first arg))
+                         'help (if (>= (length arg) 3) (third arg) "")
+                         'pseudo pseudo)
+                   rem-args)
+             'accounts rem-accounts 'foreign rem-foreign)])))
+
+(define (app-header-queries app)
+  (hash 'global (apply hash (apply append (map app-header-var (app-gvars app))))
+                     'local (apply hash (apply append (map app-header-var (app-lvars app))))))
+
+(define (app-header-var vars)
+  (list (first vars)
+        (hash 'key (symbol->string (second (second vars)))
+              'kind (symbol->string (first (second vars)))
+              'help (last vars))))
+
+;; (trace app-header-var)
+
 (define (app-program app) (app-program-helper (first (app-prog app)) (app-params app) (app-gvars app) (app-lvars app) '() '()))
 (define (app-clear-program app) (app-program-helper (first (app-onclear app)) (app-params app) (app-gvars app) (app-lvars app) '() '()))
 
@@ -69,6 +139,25 @@
 
 (define (with-args ast) (with-sym 'args ast))
 (define (with-accs ast) (with-sym 'accs ast))
+
+(define (app-vars-assoc vars sym)
+  (cond [(null? vars) #f]
+        [(eq? (first (first vars)) sym) (first vars)]
+        [else (app-vars-assoc (rest vars) sym)]))
+
+(define (app-rewrite-gvar spec)
+  (when (not (or (= (length spec) 2) (= (length spec) 3)))
+    (raise "app-rewrite-gvar")) ;; TODO add err
+  `(byte base64 ,(symbol->base64 (second (second spec)))))
+
+(define (app-rewrite-lvar spec)
+  (when (not (or (= (length spec) 2) (= (length spec) 3)))
+    (raise "app-rewrite-lvar")) ;; TODO add err
+  `(byte base64 ,(symbol->base64 (second (second spec)))))
+
+;; (trace app-vars-assoc)
+;; (trace app-rewrite-gvar)
+;; (trace app-rewrite-lvar)
 
 (define (app-spec-assoc params sym)
   (cond [(null? params) #f]
@@ -83,16 +172,6 @@
 
 (define (symbol->base64 sym)
   (bytes->string/utf-8 (base64-encode (string->bytes/utf-8 (symbol->string sym)) "")))
-
-(define (app-rewrite-gvar spec)
-  (when (not (or (= (length spec) 2) (= (length spec) 3)))
-    (raise "app-rewrite-gvar")) ;; TODO add err
-  `(byte base64 ,(symbol->base64 (last spec))))
-
-(define (app-rewrite-lvar spec)
-  (when (not (or (= (length spec) 2) (= (length spec) 3)))
-    (raise "app-rewrite-lvar")) ;; TODO add err
-  `(byte base64 ,(symbol->base64 (last spec))))
 
 (define (app-rewrite-arg n)
   `(txna ApplicationArgs ,n))
@@ -113,8 +192,8 @@
   (cond [(memq sym args) (app-arg-index args sym)]
         [(memq sym accs) (app-acc-index accs sym)]
         [(app-spec-assoc params sym) (app-rewrite-param (app-spec-assoc params sym))]
-        [(app-spec-assoc gvars sym) (app-rewrite-gvar (app-spec-assoc gvars sym))]
-        [(app-spec-assoc lvars sym) (app-rewrite-lvar (app-spec-assoc lvars sym))]
+        [(app-vars-assoc gvars sym) (app-rewrite-gvar (app-vars-assoc gvars sym))]
+        [(app-vars-assoc lvars sym) (app-rewrite-lvar (app-vars-assoc lvars sym))]
         [else sym]))
 
 (define (app-program-helper ast params global-vars local-vars local-args local-accs)

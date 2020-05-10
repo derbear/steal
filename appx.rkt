@@ -1,6 +1,8 @@
 #lang racket
 
-;; printf "\nschema\n" && racket appx.rkt sectok && printf "\nclear\n" && racket appx.rkt -c sectok | tee sectok_clear.teal && printf "\napproval\n" && racket appx.rkt -p sectok | tee sectok_approve.teal
+;; printf "\nschema\n" && racket appx.rkt asa && printf "\nheader\n" && racket appx.rkt -i asa | tee asa.json && printf "\nclear\n" && racket appx.rkt -c asa | tee asa_clear.teal && printf "\napproval\n" && racket appx.rkt -p asa | tee asa_approve.teal
+
+;; printf "\nschema\n" && racket appx.rkt sectok && printf "\nheader\n" && racket appx.rkt -i sectok | tee sectok.json && printf "\nclear\n" && racket appx.rkt -c sectok | tee sectok_clear.teal && printf "\napproval\n" && racket appx.rkt -p sectok | tee sectok_approve.teal
 
 (require racket/cmdline)
 
@@ -14,6 +16,7 @@
 
 (define show-prog (make-parameter #f))
 (define show-clear (make-parameter #f))
+(define show-hdr (make-parameter #f))
 
 (define app-name
   (command-line
@@ -22,6 +25,8 @@
                     (show-prog #t)]
    [("-c" "--clr") "Show clear program"
                    (show-clear #t)]
+   [("-i" "--hdr") "Show header interface file"
+                   (show-hdr #t)]
    #:args (app)
    app))
 
@@ -59,10 +64,12 @@
   [("asa" "asset" "assets")
    (cond [(show-prog) (displayln (stealc (stealc-bind (app-program asset-application) args)))]
          [(show-clear) (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))]
+         [(show-hdr) (displayln (app-header asset-application))]
          [else (pretty-print (app-schema asset-application))])]
   [("sectok" "security-token" "security-tokens")
    (cond [(show-prog) (displayln (stealc (stealc-bind (app-program security-token-application) args)))]
          [(show-clear) (displayln (stealc (stealc-bind (app-clear-program security-token-application) args)))]
+         [(show-hdr) (displayln (stealc (stealc-bind (app-header security-token-application) args)))]
          [else (pretty-print (app-schema security-token-application))])]
   [else (raise (format "unknown app name ~a" app-name))])
    
