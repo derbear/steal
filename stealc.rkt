@@ -169,7 +169,9 @@
   (list (string-join (list (second lines) (first lines)) " ")))
 
 (define [stealc-reorder-byte lines]
-  (list (string-join (list (third lines) (first lines) (second lines)) " ")))
+  (if (= (length lines) 2)
+      (list (string-join (list (second lines) (first lines)) " "))
+      (list (string-join (list (third lines) (first lines) (second lines)) " "))))
 
 (define [stealc-reorder-gtxn lines]
   (stealc-reorder-byte lines))
@@ -200,7 +202,7 @@
 ;; preprocess
 
 (define stealc-vararg-ops
-  '(&& || and or + *))
+  '(&& || and or + * concat))
 
 (define [stealc-preprocess prog]
   (cond [(not (list? prog)) prog]

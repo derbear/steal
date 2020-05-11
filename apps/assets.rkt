@@ -102,7 +102,6 @@
                    (addr clawback "The initial clawback address, if nonzero.")
                    (int supply "The total asset supply.")
                    (int default-frozen "The default frozen status for new accounts."))
-
            (destroy DeleteApplication
                     "Destroy an asset. The asset creator must hold the entire supply. This transaction must be sent by the asset creator.")
            (reconfigure NoOp
@@ -119,7 +118,7 @@
                    (int frozen "The new frozen value of the account.")
                    (account target "The target account whose frozen value to set."))
            (transfer NoOp
-                     "Transfer an asset to a receiver."
+                     "Transfer assets to a receiver."
                      (int amount "The amount of the asset to transfer.")
                      (account receiver "The account receiving the assets.")
                      (() account ignored))

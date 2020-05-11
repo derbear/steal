@@ -1,8 +1,8 @@
 #lang racket
 
-;; printf "\nschema\n" && racket appx.rkt asa && printf "\nheader\n" && racket appx.rkt -i asa | tee asa.json && printf "\nclear\n" && racket appx.rkt -c asa | tee asa_clear.teal && printf "\napproval\n" && racket appx.rkt -p asa | tee asa_approve.teal
+;; printf "\nschema\n" && racket appx.rkt asa && printf "\nheader\n" && racket appx.rkt -i asa | jq | tee asa.json && printf "\nclear\n" && racket appx.rkt -c asa | tee asa_clear.teal && printf "\napproval\n" && racket appx.rkt -p asa | tee asa_approve.teal
 
-;; printf "\nschema\n" && racket appx.rkt sectok && printf "\nheader\n" && racket appx.rkt -i sectok | tee sectok.json && printf "\nclear\n" && racket appx.rkt -c sectok | tee sectok_clear.teal && printf "\napproval\n" && racket appx.rkt -p sectok | tee sectok_approve.teal
+;; printf "\nschema\n" && racket appx.rkt sectok && printf "\nheader\n" && racket appx.rkt -i sectok | jq | tee sectok.json && printf "\nclear\n" && racket appx.rkt -c sectok | tee sectok_clear.teal && printf "\napproval\n" && racket appx.rkt -p sectok | tee sectok_approve.teal
 
 (require racket/cmdline)
 

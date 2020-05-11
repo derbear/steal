@@ -90,32 +90,38 @@
   (if (null? proc)
       '(args () accounts () foreign ())
       (let ([rem (app-header-args (rest proc))])
-        (if (null? (first (first proc)))
-            (app-header-arg rem (rest (first proc)) #t)
-            (app-header-arg rem (first proc) #f)))))
+        (cond
+          [(null? (first (first proc)))
+           (app-header-arg rem (rest (first proc)) #t #f)]
+          [(list? (first (first proc)))
+           (app-header-arg rem (rest (first proc)) #t (first (first (first proc))))]
+          [else (app-header-arg rem (first proc) #f #f)]))))
 
-(define (app-header-arg rem arg pseudo)
+(define (app-header-arg rem arg pseudo default)
   (let ([rem-args (second rem)]
         [rem-accounts (fourth rem)]
-        [rem-foreign (sixth rem)])
-    (case (first arg)
-      [(account)
-       (list 'args rem-args
-             'accounts
-             (cons (hash 'name (symbol->string (second arg))
+        [rem-foreign (sixth rem)]
+        [hash-base (list 'name (symbol->string (second arg))
                          'help (if (>= (length arg) 3) (third arg) "")
-                         'pseudo pseudo)
-                   rem-accounts)
-             'foreign rem-foreign)]
-      [(foreign) 'TODO]
-      [else
-       (list 'args
-             (cons (hash 'name (symbol->string (second arg))
-                         'kind (symbol->string (first arg))
-                         'help (if (>= (length arg) 3) (third arg) "")
-                         'pseudo pseudo)
-                   rem-args)
-             'accounts rem-accounts 'foreign rem-foreign)])))
+                         'pseudo pseudo)])
+    (let ([hash-base (if default
+                         (append hash-base (list 'default (symbol->string default)))
+                         hash-base)])
+      (case (first arg)
+        [(account)
+         (list 'args rem-args
+               'accounts
+               (cons (apply hash hash-base)
+                     rem-accounts)
+               'foreign rem-foreign)]
+        [(foreign) 'TODO]
+        [else
+         (list 'args
+               (cons (apply hash
+                            (append hash-base
+                                    (list 'kind (symbol->string (first arg)))))
+                     rem-args)
+               'accounts rem-accounts 'foreign rem-foreign)]))))
 
 (define (app-header-queries app)
   (hash 'global (apply hash (apply append (map app-header-var (app-gvars app))))
