@@ -29,14 +29,15 @@
      ,(sectok-take-out! snd amt)
      ,(sectok-put-in! rcv amt)))
 
+;; note: snd and rcv are bytes (must be length 8!)
 (define (sectok-rule-key snd rcv)
-  `(concat (byte 0x00)
-           (itob ,snd)
-           (itob ,rcv)))
+  `(concat (byte 0x0001) ,snd ,rcv))
 
+;; note: snd and rcv are integers
 (define (sectok-xfer-allowed? snd rcv)
   ;; possible underflow is deliberate
-  `(< (- (app-global-gets ,(sectok-rule-key snd rcv)) 1) (global LatestTimestamp)))
+  `(< (- (app-global-gets ,(sectok-rule-key `(itob ,snd) `(itob ,rcv))) 1)
+      (global LatestTimestamp)))
 
 ;; separate upgrade key
 ;; *auditability is the issue for upgrades*
@@ -51,15 +52,19 @@
 (define frozen-help "Whether this account is frozen. This account issue and accept transfers unless this is zero.")
 (define max-balance-help "The maximum token balance allowed for this account.")
 (define lock-until-help "The first timestamp at which this account can issue and accept transfers.")
+(define lock-until-group-help "The first timestamp at which accounts in one group can issue transfers to accounts in another group.")
 (define transfer-group-help "The transfer group of this account, which affects the set of allowed transfers to and from other groups.")
 (define balance-help "The number of tokens held by this account.")
 
 (define security-token-application
-  `((gvars (token-params   (string px) ,token-params-help)
+  `((gvars (token-params   (string px) ,token-params-help) ;; TODO split up the params
            (reserve-supply (int rv)    ,reserve-supply-help)
            (total-supply   (int tt)    ,total-supply-help)
-           (paused         (int ps)    ,paused-help))
-    (gvars-varint 20) ;; lock-until for group transfers TODO fix schemagen, querygen here
+           (paused         (int ps)    ,paused-help)
+
+           (lock-until-group ((map byte int 40)
+                              (prefix "0x0001"))
+                             ,lock-until-group-help))
 
     ;; TODO store these in bitmask?
     ;; TODO support (key-of frozen) -> fz
@@ -77,16 +82,16 @@
                    (int total-supply "The total supply for the token."))
            (destroy DeleteApplication
                     "Destroy a security token. The entire token supply must be in the reserve. This transaction must be sent by a contract admin.")
-           (reprogram UpdateApplication
-                      "Update the programs implementing the token. This transaction must be sent by a contract admin.")
+           (upgrade UpdateApplication
+                    "Update the programs implementing the token. This transaction must be sent by a contract admin.")
            (pause NoOp
                   "Control whether all transfers are disallowed."
                   (int paused "No transfers will be allowed unless this is zero."))
            (set-transfer-rule NoOp
                               "Create, update, or delete a transfer rule. This transaction must be sent by a transfer admin."
-                              ;; TODO figure out format here
-                              (byte pair "A two-byte string corresponding to the sender and the receiver, respectively, specified by this transfer rule.")
-                              (int lock-until "The first timestamp at which the sender may make transfers to the receiver."))
+                              (int send-group "The sending group the rule applies to.")
+                              (int receive-group "The receiving group the rule applies to.")
+                              (int lock-until "The first timestamp at which accounts in the sending group may make transfers to accounts in the receiving group."))
            (set-contract-admin NoOp
                                "Configure the contract admin status of an account. This transaction must be sent by a contract admin."
                                ((cX) string ignored)
@@ -158,10 +163,15 @@
              (= (app-global-gets reserve-supply) (app-global-gets total-supply)))]
 
        [(= (txn OnCompletion) ,UpdateApplication)
-        (note "reprogram")
+        (note "upgrade")
         (and (= (txn NumAppArgs) 0)
              (= (txn NumAccounts) 0)
              (= (app-local-gets 0 contract-admin) 1))]
+
+       [(= (txn OnCompletion) ,OptIn)
+        (note "opt-in")
+        (and (= (txn NumAppArgs) 0)
+             (= (txn NumAccounts) 0))]
 
        [else
         (assert (and (= (txn OnCompletion) ,NoOp)
@@ -174,12 +184,16 @@
                       (app-global-put! paused (btoi new-paused))
                       (= (app-local-gets 0 contract-admin) 1))
 
-                (with ([args (pair lock-until)])
+                (with ([args (send-group receive-group new-lock-until)])
                       (note "transfer-rule")
-                      (if (= lock-until 0)
-                          (app-global-del! pair lock-until)
-                          (app-global-put! pair lock-until))
-                      (and (= (txn NumAppArgs) 2)
+
+                      (if (= (btoi new-lock-until) 0)
+                          (app-global-del! ,(sectok-rule-key 'send-group 'receive-group))
+                          (app-global-put! ,(sectok-rule-key 'send-group 'receive-group) (btoi new-lock-until)))
+
+                      (and (= (len send-group) 8)
+                           (= (len receive-group) 8)
+                           (= (txn NumAppArgs) 3)
                            (= (app-local-gets 0 transfer-admin) 1))))
 
             (if (= (txn NumAppArgs) 1)
@@ -219,12 +233,12 @@
                               (= (app-local-gets 0 contract-admin) 1)]
 
                              [else
-                              (note "max balance, lock until, transfer group, freeze")
+                              (note "set max balance, lock until, transfer group, freeze")
                               (app-local-put-acct! target key (btoi value))
                               (or (and (= key (byte "\"fz\""))
-                                       (or (= (app-global-gets 0 contract-admin) 1)
-                                           (= (app-global-gets 0 transfer-admin) 1)))
-                                  (and (= (app-global-gets 0 transfer-admin) 1)
+                                       (or (= (app-local-gets 0 contract-admin) 1)
+                                           (= (app-local-gets 0 transfer-admin) 1)))
+                                  (and (= (app-local-gets 0 transfer-admin) 1)
                                        (or (= key (byte "\"mb\""))
                                            (= key (byte "\"tl\""))
                                            (= key (byte "\"tg\"")))))]))))]))

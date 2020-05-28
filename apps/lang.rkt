@@ -35,10 +35,6 @@
   (if (assoc sym app)
       (rest (assoc sym app))
       '()))
-(define (app-get-num sym app)
-  (if (assoc sym app)
-      (first (rest (assoc sym app)))
-      0))
 (define (app-vars sym app)
   (app-get sym app))
 
@@ -50,15 +46,29 @@
 (define (app-lvars app) (app-vars 'lvars app))
 
 (define (app-int? var) (eq? (first (second var)) 'int))
-(define (app-blob? var) (not (app-int? var)))
+(define (app-blob? var) (and (symbol? (first (second var))) (not (app-int? var))))
 
 (define (app-blobs vars) (length (filter app-blob? vars)))
 (define (app-ints vars) (length (filter app-int? vars)))
 
-(define (app-gvars-varint app) (app-get-num 'gvars-varint app))
-(define (app-gvars-varblob app) (app-get-num 'gvars-varblob app))
-(define (app-lvars-varint app) (app-get-num 'lvars-varint app))
-(define (app-lvars-varblob app) (app-get-num 'lvars-varblob app))
+(define (app-varblob-size var)
+  (if (and (list? (first (second var)))
+           (not (eq? (first (first (second var))) 'int)))
+      (last (first (second var)))
+      0))
+(define (app-varint-size var)
+  (if (and (list? (first (second var)))
+           (eq? (first (first (second var))) 'int))
+      (last (first (second var)))
+      0))
+
+(define (app-varblobs vars) (apply + (map app-varblob-size vars)))
+(define (app-varints vars) (apply + (map app-varint-size vars)))
+
+(define (app-gvars-varint app) (app-varints (app-get 'gvars app)))
+(define (app-gvars-varblob app) (app-varblobs (app-get 'gvars app)))
+(define (app-lvars-varint app) (app-varints (app-get 'lvars app)))
+(define (app-lvars-varblob app) (app-varblobs (app-get 'lvars app)))
 
 (define (app-schema app)
   `((global-state-blobs ,(+ (app-gvars-varblob app) (app-blobs (app-gvars app))))
@@ -125,15 +135,21 @@
 
 (define (app-header-queries app)
   (hash 'global (apply hash (apply append (map app-header-var (app-gvars app))))
-                     'local (apply hash (apply append (map app-header-var (app-lvars app))))))
+        'local (apply hash (apply append (map app-header-var (app-lvars app))))))
 
 (define (app-header-var vars)
-  (list (first vars)
-        (hash 'key (symbol->string (second (second vars)))
-              'kind (symbol->string (first (second vars)))
-              'help (last vars))))
-
-;; (trace app-header-var)
+  (if (list? (first (second vars)))
+      (list (first vars)
+            (hash 'map (apply hash (append (list 'kind
+                                                 (symbol->string (second (first (second vars)))))
+                                           (last (second vars))))
+                  'size (last (first (second vars)))
+                  'kind (symbol->string (third (first (second vars))))
+                  'help (last vars)))
+      (list (first vars)
+            (hash 'key (symbol->string (second (second vars)))
+                  'kind (symbol->string (first (second vars)))
+                  'help (last vars)))))
 
 (define (app-program app) (app-program-helper (first (app-prog app)) (app-params app) (app-gvars app) (app-lvars app) '() '()))
 (define (app-clear-program app) (app-program-helper (first (app-onclear app)) (app-params app) (app-gvars app) (app-lvars app) '() '()))
