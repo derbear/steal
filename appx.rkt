@@ -11,12 +11,14 @@
 (require "apps/lang.rkt")
 (require "apps/assets.rkt")
 (require "apps/sectok.rkt")
+(require "apps/sovauc.rkt")
 
 (require racket/pretty)
 
 (define show-prog (make-parameter #f))
 (define show-clear (make-parameter #f))
 (define show-hdr (make-parameter #f))
+(define show-escrow (make-parameter #f))
 
 (define app-name
   (command-line
@@ -25,6 +27,8 @@
                     (show-prog #t)]
    [("-c" "--clr") "Show clear program"
                    (show-clear #t)]
+   [("-e" "--escrow") "Show escrow file (if exists)"
+                   (show-escrow #t)]
    [("-i" "--hdr") "Show header interface file"
                    (show-hdr #t)]
    #:args (app)
@@ -33,7 +37,13 @@
 (define args
   '((TMPL_CREATOR "Q732YJSTN4PVI4IHJ7DZTMFYM3MKXRFWBNJ3X7JKKAW2GH4O5KTLVA3S6E")
     (TMPL_SUPPLY 10000000)
-    (TMPL_DEFAULTFROZEN 1)))
+    (TMPL_DEFAULTFROZEN 1)
+    (TMPL_OWNER "Q732YJSTN4PVI4IHJ7DZTMFYM3MKXRFWBNJ3X7JKKAW2GH4O5KTLVA3S6E")
+    (TMPL_SOV 3)
+    (TMPL_USDC 5)
+    (TMPL_APPID 0x0000000000001040)
+    (TMPL_EPREFIX "0x02200704030500020106260208")
+    (TMPL_ESUFFIXH "0x14277ba76a368a0134253ea7238cb7f69f30b34b717750a4edaa617526ff83ce")))
 
 (define (stealc-flatten-begin-helper ast)
   (cond [(null? ast) ast]
@@ -65,13 +75,25 @@
    (cond [(show-prog) (displayln (stealc (stealc-bind (app-program asset-application) args)))]
          [(show-clear) (displayln (stealc (stealc-bind (app-clear-program asset-application) args)))]
          [(show-hdr) (displayln (app-header asset-application))]
+         [(show-escrow) (raise "no escrow for assets")]
          [else (pretty-print (app-schema asset-application))])]
   [("sectok" "security-token" "security-tokens")
    (cond [(show-prog) (displayln (stealc (stealc-bind (app-program security-token-application) args)))]
          [(show-clear) (displayln (stealc (stealc-bind (app-clear-program security-token-application) args)))]
          [(show-hdr) (displayln (stealc (stealc-bind (app-header security-token-application) args)))]
+         [(show-escrow) (raise "no escrow for security token")]
          [else (pretty-print (app-schema security-token-application))])]
+  [("sovauc" "auction")
+   (cond [(show-prog) (displayln (stealc (stealc-bind (app-program sovauc-application) args)))]
+         [(show-clear) (displayln (stealc (stealc-bind (app-clear-program sovauc-application) args)))]
+         [(show-hdr) (displayln (stealc (stealc-bind (app-header sovauc-application) args)))]
+         [(show-escrow) (displayln (stealc (stealc-bind sovauc-escrow args)))]
+         [else (pretty-print (app-schema sovauc-application))])]
   [else (raise (format "unknown app name ~a" app-name))])
+
+;;;;;;;;;;;;;;;;
+
+
    
 ;; (displayln (stealc (app-program security-token-application)))
 ;; (pretty-print (app-program security-token-application))

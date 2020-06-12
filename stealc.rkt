@@ -169,10 +169,14 @@
   (list (string-join (list (second lines) (first lines)) " ")))
 
 (define [stealc-reorder-byte lines]
-  (if (= (length lines) 2)
-      (list (string-join (list (second lines) (first lines)) " "))
-      (list (string-join (list (third lines) (first lines) (second lines)) " "))))
-
+  (cond [(= (length lines) 2)
+         (list (string-join (list (second lines) (first lines)) " "))]
+        [(= (length lines) 3)
+         (list (string-join (list (third lines) (first lines) (second lines)) " "))]
+        [(= (length lines) 4)
+         (list (string-join (list (fourth lines) (first lines) (second lines) (third lines)) " "))]
+        [else (raise (format "~a length lines is ~a" (last lines) (length lines)))]))
+      
 (define [stealc-reorder-gtxn lines]
   (stealc-reorder-byte lines))
 
