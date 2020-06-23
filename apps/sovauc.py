@@ -5,230 +5,623 @@ from pprint import pformat
 
 SUPPLY_UNITS="SOV"
 BID_UNITS="USDC"
+ASSET_TXN="axfer"
 
-## 9 (1B) + 4 decimal places (%) + 6 decimal places (asset precision)
-getcontext().prec = 9 + 4 + 6
+weekly_params = {
+    "anchor": Decimal(180000000 * 100),
+    "num_tranches": 78,
+    "supply": Decimal(24000000),
+    "supply_percent_hths": Decimal(4000),
+    "initial_tranches_size": Decimal(24000000) * 25,
+    "lookback": 4,
+    "min_tranche_size": 1,
+    "auction_duration": Decimal(604800),
+}
 
-# # note: may want to check that supply is divisble by supply_percent's denominator
-# # and warn of modulus loss if not
-# # or, we could just avoid making compile-time choices about runtime division
-# # and use LSr_s, LAr_s whole
-# def tranche_size_func(anchor, num_tranches, initial_tranches_size, supply, supply_percent, lookback):
-#     supply_prop = supply_percent.quantize(Decimal('.01'), rounding=ROUND_DOWN)
-#     print("supply_percent={}%".format(supply_prop))
-#     LSr_s = lookback * supply * supply_prop
-#     LAr_s = lookback * anchor * supply_prop
-#     if LAr_s == 0:
-#         if lookback == 0:
-#             raise Exception("lookback cannot be zero")
-#         if supply == 0:
-#             raise Exception("supply cannot be zero")
-#         if supply_prop == 0:
-#             raise Exception("supply proportion cannot be zero")
-#         raise Exception("LAr_s computed to be zero")
-#     def var_tranche_size(window_total_raise, window_total_tranche_size):
-#         return ((2 * window_total_raise * (LSr_s - lookback * window_total_tranche_size)) /
-#                 (LAr_s + num_tranches * window_total_raise))
-#     print("var_tranche_size=(2 * window_total_raise * ({} - {} * window_total_tranche_size)) / ({} + {} * window_total_raise)".format(LSr_s, lookback, LAr_s, num_tranches))
-#     return var_tranche_size
+indent = 0
+def trace(fn):
+    def inner(*args):
+        global indent
+        indent += 1
+        try:
+            res = fn(*args)
+        finally:
+            indent -= 1
+        print((" " * indent) + "{}.({}) -> {}".format(fn.__name__, map(str, args), res))
+        return res
+    return inner
 
+AUCTION_SIM_HANDLE = -42
+ESCROW_SIM_HANDLE = -9000
+
+ERROR_STATE=-1
 NONEXIST_STATE=0
 CREATED_STATE=1
 READY_STATE=2
 OPEN_STATE=3
 PAYOUT_STATE=4
 
-class AuctionContractSimulator:
-    def __init__(self):
-        self.state = NONEXIST_STATE
-        self.opted_in = {}
+time = 111
+def now():
+    return time
+def wait(seconds):
+    global time
+    time += seconds
 
-    def create(self, admin, args):
-        if self.state != NONEXIST_STATE:
-            raise Exception("self.state={}; expected NONEXIST_STATE".format(self.state))
-        self.state = CREATED_STATE
-        self.admin = admin
-        self.args = args
-        self.app_id = 42
-        return self.app_id
-
-    def _assert_self_exists(self):
-        if self.state == NONEXIST_STATE:
-            raise Exception("self.state=NONEXIST_STATE")
-        
-    def setup_escrow(self, escrow):
-        self._assert_self_exists()
-        self.state = READY_STATE
-        self.escrow = escrow
-
-    def optin(self, sender):
-        self._assert_self_exists()
-        if sender in self.opted_in and self.opted_in[sender] == True:
-            raise Exception("sender {} already opted in", sender)
-        self.opted_in[sender] = True
+# TODO error handling
 
 class EscrowSimulator:
-    pass
+    def __init__(self):
+        self.state = NONEXIST_STATE
 
-def call_application(sim, sender, args, app_id):
-    if app_id == 0:
-        app_id = sim.create(sender, args)
-        print("{} <- call_application(sender={}, args={})".format(app_id, sender, args))
-        return app_id
-    else:
-        if app_id != sim.app_id:
-            raise Exception("call_application: wrong app id {}, expected {}".format(app_id, sim.app_id))
-        if args["call"] == "escrow":
-            sim.setup_escrow(args["escrow"])
-        elif args["call"] == "optin":
-            sim.optin(sender)
-        else:
-            raise Exception("unknown call {}".format(args["call"]))
-        print("call_application(sender={}, app_id={}, args={})".format(sender, app_id, args))
+    def __str__(self):
+        return "EscrowSimulator"
+
+    @trace
+    def current_state(self, auction_context, escrow_handle):
+        if escrow_handle != ESCROW_SIM_HANDLE:
+            return ERROR_STATE
+        return self.state
+
+    @trace
+    def create(self, auction_context):
+        self.state = CREATED_STATE
+        self.context = auction_context
+        return ESCROW_SIM_HANDLE
+
+class AuctionSimulator:
+    def __init__(self):
+        self.state = NONEXIST_STATE
+
+        # map address -> receipt iff opted in
+        self.accounts = {}
+
+    def __str__(self):
+        return "AuctionSimulator"
+
+    @trace
+    def current_state(self, auction_context, auction_handle):
+        if auction_handle == AUCTION_SIM_HANDLE:
+            return ERROR_STATE
+        # TODO return correct other statuses
+        return self.state
+
+    @trace
+    def read_auction_params(self, auction_handle):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        return self.context.params
+
+    @trace
+    def read_tranche_index(self, auction_handle):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        return self.tranche_index
+
+    @trace
+    def read_tranche_ring_sum(self, auction_handle):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        return self.tranche_ring_sum()
+
+    @trace
+    def read_bid_ring_sum(self, auction_handle):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        return self.bid_ring_sum()
+
+    @trace
+    def read_auction_raised(self, auction_handle):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        return self.auction_raised
+
+    @trace
+    def read_tranche_supply(self, auction_handle):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        return self.tranche_supply
+
+    @trace
+    def read_escrow_handle(self, auction_handle):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        return self.escrow
+
+    @trace
+    def enumerate_bidders(self, auction_handle):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+
+        bidders = []
+        for address in self.accounts:
+            if self.accounts[address] > 0:
+                bidders.append(address)
+        return bidders
+        
+
+    # TODO what to do if bidder has not opted in?
+    # current behavior raises exception
+    @trace
+    def read_bid_amount(self, auction_handle, address):
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        return self.accounts[address]
+
+    def check_auction_handle(self, auction_handle):
+        if auction_handle != AUCTION_SIM_HANDLE:
+            raise(Exception("bad auction handle {}".format(auction_handle)))
+
+    def check_auction_exists(self, auction_handle):
+        if self.state == NONEXIST_STATE or self.state == ERROR_STATE:
+            raise(Exception("bad auction state {}".format(self.state)))
+
+    def check_auction_context(self, auction_context):
+        if not isinstance(auction_context, AuctionContext):
+            raise(Exception("bad auction context {}"))
+
+    def tranche_ring_sum(self):
+        least = self.tranche_index - self.context.params["lookback"]
+        if least < 0:
+            least = 0
+        total = 0
+        for i in range(least, self.tranche_index):
+            total += self.tranche_sizes[i]
+        return total
+
+    def bid_ring_sum(self):
+        least = self.tranche_index - self.context.params["lookback"]
+        if least < 0:
+            least = 0
+        total = 0
+        for i in range(least, self.tranche_index):
+            total += self.amounts_raised[i]
+        return total
+
+    def auction_amount_correct(self, intended_auction_amount, remainder):
+        if self.tranche_index < self.context.params["lookback"]:
+            # TODO check remainder?
+            return intended_auction_amount == self.context.params["initial_tranches_size"]
+
+        if (self.bid_ring_sum() == 0 or
+            self.context.params["supply"] * self.context.params["supply_percent_hths"] <= self.tranche_ring_sum()):
+            # TODO check remainder?
+            return intended_auction_amount == self.context.params["min_tranche_size"]
+
+        divisor = (self.context.params["lookback"] * self.context.params["anchor"] * self.context.params["supply_percent_hths"] +
+                   self.context.params["num_tranches"] * self.bid_ring_sum())
+
+        if remainder >= divisor:
+            return False
+
+        return (intended_auction_amount * divisor + remainder
+                ==
+                2 * self.bid_ring_sum() *
+                (self.context.params["supply"] * self.context.params["supply_percent_hths"] -
+                 self.tranche_ring_sum()))
+
+    def payout_amount_correct(self, bid_amount, intended_payout_amount, remainder):
+        return (intended_payout_amount * self.auction_raised + remainder
+                ==
+                self.tranche_supply * bid_amount)
+
+    # returns auction handle
+    @trace
+    def create(self, auction_context):
+        self.state = CREATED_STATE
+        self.context = auction_context
+
+        self.tranche_sizes = []
+        self.amounts_raised = []
+        for i in range(self.context.params["num_tranches"]):
+            self.tranche_sizes.append(0)
+            self.amounts_raised.append(0)
+
+        # needed due to default values
+        self.tranche_index = 0
+        self.outstanding_receipts = 0
+        self.auction_raised = 0
+        self.auction_deadline = 0
+
+        return AUCTION_SIM_HANDLE
+
+    @trace
+    def bind_escrow(self, auction_context, auction_handle, escrow_handle):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        if escrow_handle != ESCROW_SIM_HANDLE:
+            raise(Exception("bad escrow handle {}".format(escrow_handle)))
+        self.escrow = escrow_handle
+        return True
+
+    @trace
+    def destroy(self, auction_context, auction_handle):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        if self.context.params["num_tranches"] != self.tranche_index:
+            raise(Exception("num_tranches != tranche_index: {} != {}".format(self.context.params["num_tranches"], self.tranche_index)))
+        self.state = NONEXIST_STATE
+        return True
+
+    @trace
+    def opt_in(self, auction_context, auction_handle, address):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+        if address in self.accounts:
+            raise(Exception("address already opted in {}".format(address)))
+        self.accounts[address] = 0
+        return True
+
+    @trace
+    def close_out(self, auction_context, auction_handle, address):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        if address not in self.accounts:
+            raise(Exception("address not opted in {}".format(address)))
+        self.outstanding_receipts -= self.accounts[address]
+        del self.accounts[address]
+        return True
+
+    @trace
+    def opted_in(self, auction_context, auction_handle, address):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        return address in self.accounts
+
+    # TODO this should only be permitted from a privileged sender
+    @trace
+    def open_auction(self, auction_context, auction_handle, other_transaction, remainder):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+
+        if self.auction_deadline != 0:
+            raise(Exception("auction_deadline != 0".format(self.auction_deadline)))
+        if self.tranche_index >= self.context.params["num_tranches"]:
+            raise(Exception("tranche_index >= num_tranches: {} > {}".format(self.tranche_index, self.context.params["num_tranches"])))
+        if other_transaction.type != ASSET_TXN:
+            raise(Exception("other_transaction.type != ASSET_TXN: {}".format(other_transaction.type)))
+        if other_transaction.asset != SUPPLY_UNITS:
+            raise(Exception("other_transaction.asset != SUPPLY_UNITS: {}".format(other_transaction.asset)))
+        if other_transaction.asset_receiver != self.escrow:
+            raise(Exception("other_transaction.asset_receiver != escrow: {} != {}".format(other_transaction.asset_receiver, self.escrow)))
+        if other_transaction.asset_close_to != 0:
+            raise(Exception("other_transaction.asset_close_to != 0: {}".format(other_transaction.asset_close_to)))
+        if other_transaction.asset_sender != 0:
+            raise(Exception("other_transaction.asset_sender != 0: {}".format(other_transaction.asset_sender)))
+        if not self.auction_amount_correct(other_transaction.asset_amount, remainder):
+            raise(Exception("other_transaction.asset_amount, remainder are incorrect: {}, {}".format(other_transaction.asset_amount, remainder)))
+
+        self.tranche_supply = other_transaction.asset_amount
+        self.auction_deadline = now() + self.context.params["auction_duration"]
+
+    @trace
+    def close_auction(self, auction_context, auction_handle):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+
+        n = now()
+        if n < self.auction_deadline:
+            raise(Exception("now() < self.auction_deadline: {} < {}".format(n, self.auction_deadline)))
+        if self.outstanding_receipts != 0:
+            raise(Exception("outstanding_receipts != 0: {}".format(self.outstanding_receipts)))
+
+        self.tranche_sizes[self.tranche_index] = self.tranche_supply
+        self.amounts_raised[self.tranche_index] = self.auction_raised
+
+        self.tranche_supply = 0
+        self.auction_raised = 0
+        self.auction_deadline = 0
+
+        self.tranche_index += 1
+
+    # note: bidder must be sender here
+    # TODO entering lots of small bids incurs fees proportional to fees spent (worth preventing?)
+    @trace
+    def enter_bid(self, auction_context, auction_handle, bidder, other_transaction):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+
+        n = now()
+        if n >= self.auction_deadline:
+            raise(Exception("now() >= self.auction_deadline: {} >= {}".format(n, self.auction_deadline)))
+        if other_transaction.type != ASSET_TXN:
+            raise(Exception("other_transaction.type != ASSET_TXN: {}".format(other_transaction.type)))
+        if other_transaction.asset != BID_UNITS:
+            raise(Exception("other_transaction.asset != BID_UNITS: {}".format(other_transaction.asset)))
+        if other_transaction.asset_receiver != self.escrow:
+            raise(Exception("other_transaction.asset_receiver != escrow: {} != {}".format(other_transaction.asset_receiver, escrow)))
+        if other_transaction.asset_sender != 0:
+            raise(Exception("other_transaction.asset_sender != 0: {}".format(other_transaction.asset_sender)))
+
+        self.accounts[bidder] += other_transaction.asset_amount
+        self.outstanding_receipts += other_transaction.asset_amount
+        self.auction_raised += other_transaction.asset_amount
+
+    # TODO add this to contract
+    @trace
+    def destroy_bid(self, auction_context, auction_handle, bidder):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+
+        n = now()
+        if n < self.auction_deadline:
+            raise(Exception("now() < self.auction_deadline: {} < {}".format(n, self.auction_deadline)))
+        if self.env.opted_in(bidder, SUPPLY_UNITS):
+            raise(Exception("cannot destroy bid of bidder who has opted in to SUPPLY_UNITS"))
+
+        # note that we cannot close out in the stead of the malicious bidder
+        self.outstanding_receipts -= self.accounts[bidder]
+        self.accounts[bidder] = 0
+
+    # note: bidder cannot be sender here
+    @trace
+    def payout_bid(self, auction_context, auction_handle, bidder, other_transaction, remainder):
+        self.check_auction_context(auction_context)
+        self.check_auction_handle(auction_handle)
+        self.check_auction_exists(auction_handle)
+
+        n = now()
+        if n < self.auction_deadline:
+            raise(Exception("now() < self.auction_deadline: {} < {}".format(n, self.auction_deadline)))
+        if other_transaction.type != ASSET_TXN:
+            raise(Exception("other_transaction.type != ASSET_TXN: {}".format(other_transaction.type)))
+        if other_transaction.asset != SUPPLY_UNITS:
+            raise(Exception("other_transaction.asset != SUPPLY_UNITS: {}".format(other_transaction.asset)))
+        if other_transaction.asset_receiver != bidder:
+            raise(Exception("cannot pay out bid to non-bidder: {} != {}".format(asset_receiver, bidder)))
+        if other_transaction.asset_close_to != 0:
+            raise(Exception("other_transaction.asset_close_to != 0: {}".format(other_transaction.asset_close_to)))
+        if other_transaction.asset_sender != 0:
+            raise(Exception("other_transaction.asset_sender != 0: {}".format(other_transaction.asset_sender)))
+        if not self.payout_amount_correct(self.accounts[bidder], other_transaction.asset_amount, remainder):
+            raise(Exception("payout amount incorrect: bid_amount={}, payout_amount={}, remainder={}".format(self.accounts[bidder], other_transaction.asset_amount, remainder)))
+
+        self.outstanding_receipts -= self.accounts[bidder]
+        self.accounts[bidder] = 0
+
+class Transaction:
+    def __init__(self, type, asset, asset_receiver, asset_close_to, asset_sender, asset_amount):
+        self.type = type
+        self.asset = asset
+        self.asset_receiver = asset_receiver
+        self.asset_close_to = asset_close_to
+        self.asset_sender = asset_sender
+        self.asset_amount = asset_amount
+
+    def __str__(self):
+        return "Txn(type={},asset={},asset_receiver={},asset_close_to={},asset_sender={},asset_amount={})".format(self.type, self.asset, self.asset_receiver, self.asset_close_to, self.asset_sender, self.asset_amount)
+
+class AuctionContext2:
+    def __init__(self, administrator, params):
+        self.administrator = administrator
+
+        # TODO do we actually need to persist these in here? can just query from the auction state
+        self.params = params
+    def __str__(self):
+        return "AuctionContext(admin={})".format(self.administrator)
+
+    @trace
+    def compute_new_tranche_size(self, sim, auction_handle):
+        params = sim.read_auction_params(auction_handle)
+        tranche_index = sim.read_tranche_index(auction_handle)
+        bid_ring_sum = sim.read_bid_ring_sum(auction_handle)
+        tranche_ring_sum = sim.read_tranche_ring_sum(auction_handle)
+
+        if tranche_index < params["lookback"]:
+            return params["initial_tranches_size"], 0
+
+        if (bid_ring_sum == 0 or
+            params["supply"] * params["supply_percent_hths"] <= tranche_ring_sum):
+            return params["min_tranche_size"], 0
+
+        divisor = (params["lookback"] * params["anchor"] * params["supply_percent_hths"] +
+                   params["num_tranches"] * bid_ring_sum)
+
+        dividend = (2 * bid_ring_sum *
+                    (params["supply"] * params["supply_percent_hths"] -
+                     tranche_ring_sum))
+
+        print("+++", dividend, divisor)
+
+        # note: dividend and divisor at this point should be of Decimal type
+        return dividend // divisor, dividend % divisor
+
+    @trace
+    def compute_payout(self, sim, auction_handle, bidder):
+        auction_raised = sim.read_auction_raised(auction_handle)
+        tranche_supply = sim.read_tranche_supply(auction_handle)
+        bid_amount = sim.read_bid_amount(auction_handle, bidder)
+
+        # divisor = 100 * auction_raised
+        divisor = auction_raised
+        dividend = tranche_supply * bid_amount
+
+        # note: dividend and divisor at this point should be of Decimal type
+        return dividend // divisor, dividend % divisor
+
+# returns: AuctionContext
+def create_auction_with_sim(sim, esim, admin, params):
+    # TODO pass in admin
+    ctx = AuctionContext()
+
+    ctx.sim = sim
+    ctx.esim = esim
+    ctx.params = params
+
+    ctx.user = admin
+    ctx.admin = True
+
+    ctx.auction_handle = ctx.sim.create(ctx)
+    # ctx.escrow_handle =
+    escrow_handle = ctx.esim.create(ctx)
+
+    ctx.sim.bind_escrow(ctx, ctx.auction_handle, escrow_handle)
+
+    return ctx
+
+# returns: AuctionContext
+def bind_auction_to_sim(sim, esim, ahand, bidder):
+    ctx = AuctionContext()
+
+    ctx.sim = sim
+    ctx.esim = esim
+    ctx.auction_handle = ahand
+
+    ctx.user = bidder
+    ctx.admin = False
+
+    return ctx
 
 class AuctionContext:
-    def __init__(self,
+    def __init__(self):
+        pass
 
-                 auction_administrator,
-                 
-                 anchor=Decimal(180000000),
-                 num_tranches=Decimal(78),
-                 supply=Decimal(24000000),
-                 supply_percent_hths=Decimal(4000),
-                 initial_tranches_size=Decimal(180000000) * 25 / 10000,
-                 lookback=4,
-                 min_tranche_size=1,
+    @trace
+    def compute_new_tranche_size(self):
+        params = self.sim.read_auction_params(self.auction_handle)
+        tranche_index = self.sim.read_tranche_index(self.auction_handle)
+        bid_ring_sum = self.sim.read_bid_ring_sum(self.auction_handle)
+        tranche_ring_sum = self.sim.read_tranche_ring_sum(self.auction_handle)
 
-                 auction_duration=Decimal(604800)):
-        self.auction_administrator = admin
-        self.anchor = anchor
-        self.num_tranches = num_tranches,
-        self.supply = supply
-        self.supply_percent_hths = supply_percent_hths
-        self.initial_tranches_size = initial_tranches_size,
-        self.lookback = lookback
-        self.min_tranche_size = min_tranche_size
-    
-def setup_escrow(sim, app_id, sender, escrow):
-    call_application(sim, sender, {"call": "escrow", "escrow": escrow}, app_id)
+        if tranche_index < params["lookback"]:
+            return params["initial_tranches_size"], 0
 
-# returns: auction ID
-def init_auction_series(sim,
+        if (bid_ring_sum == 0 or
+            params["supply"] * params["supply_percent_hths"] <= tranche_ring_sum):
+            return params["min_tranche_size"], 0
 
-                        auction_administrator,
+        divisor = (params["lookback"] * params["anchor"] * params["supply_percent_hths"] +
+                   params["num_tranches"] * bid_ring_sum)
 
-                        anchor,
-                        num_tranches,
-                        initial_tranches_size,
-                        supply,
-                        supply_percent_hths,
-                        lookback,
-                        min_tranche_size,
+        dividend = (2 * bid_ring_sum *
+                    (params["supply"] * params["supply_percent_hths"] -
+                     tranche_ring_sum))
 
-                        auction_duration):
-    
-    supply_prop = supply_percent_hths.quantize(Decimal('1'), rounding=ROUND_DOWN)
-    # print("supply_percent_hths={}".format(supply_prop))
-    LSr_s = lookback * supply * supply_prop
-    LAr_s = lookback * anchor * supply_prop
-    if LAr_s == 0:
-        if lookback == 0:
-            raise Exception("lookback cannot be zero")
-        if supply == 0:
-            raise Exception("supply cannot be zero")
-        if supply_prop == 0:
-            raise Exception("supply proportion cannot be zero")
-        raise Exception("LAr_s computed to be zero")
+        print("+++", dividend, divisor)
 
-    if LSr_s >= Decimal(2)**64:
-        raise Exception("LSr_s {} >= 2^64".format(LSr_s))
-    if LAr_s >= Decimal(2)**64:
-        raise Exception("LAr_s {} >= 2^64".format(LAr_s))
-    if lookback > 100:
-        raise Exception("lookback {} > 100".format(lookback))
-    if num_tranches > 1000:
-        raise Exception("num_tranches {} > 1000".format(num_tranches))
+        # note: dividend and divisor at this point should be of Decimal type
+        return dividend // divisor, dividend % divisor
 
-    args = {
-        "call": "create",
-        "LSr_s": LSr_s * Decimal(1000000),
-        "LAr_s": LAr_s * Decimal(10000),
-        "lookback": lookback,
-        "num_tranches": num_tranches,
-        "initial_tranches_size": initial_tranches_size,
-        "min_tranche_size": min_tranche_size,
-        "auction_duration": auction_duration,
-    }
+    @trace
+    def compute_payout(self, bidder):
+        auction_raised = self.sim.read_auction_raised(self.auction_handle)
+        tranche_supply = self.sim.read_tranche_supply(self.auction_handle)
+        bid_amount = self.sim.read_bid_amount(self.auction_handle, bidder)
 
-    return call_application(sim, auction_administrator, pformat(args), 0)
+        # divisor = 100 * auction_raised
+        divisor = auction_raised
+        dividend = tranche_supply * bid_amount
 
-def setup_series(admin):
-    print('setup')
-    app_id = init_auction_series(sim,
+        # note: dividend and divisor at this point should be of Decimal type
+        return dividend // divisor, dividend % divisor
 
-                                 auction_administrator=admin,
-                                 
-                                 anchor=Decimal(180000000),
-                                 num_tranches=Decimal(78),
-                                 supply=Decimal(24000000),
-                                 supply_percent_hths=Decimal(4000),
-                                 initial_tranches_size=Decimal(180000000) * 25 / 10000,
-                                 lookback=4,
-                                 min_tranche_size=1,
+    @trace
+    def find_escrow_handle(self):
+        return self.sim.read_escrow_handle(self.auction_handle)
 
-                                 auction_duration=Decimal(604800), # 1 week
-    )
+    @trace
+    def open_auction(self):
+        amount, remainder = self.compute_new_tranche_size()
+        other_transaction = Transaction(type=ASSET_TXN,
+                                        asset=SUPPLY_UNITS,
+                                        asset_receiver=self.find_escrow_handle(),
+                                        asset_close_to=0,
+                                        asset_sender=0,
+                                        asset_amount=amount
+        )
+        self.sim.open_auction(self, self.auction_handle, other_transaction, remainder)
 
-    setup_escrow(sim, app_id, sender="ADMIN", escrow="ESCROW")
-    return app_id
+    @trace
+    def close_auction(self):
+        self.payout_auction()
+        self.sim.close_auction(self, self.auction_handle)
+        
+    @trace
+    def opt_in(self):
+        self.sim.opt_in(self, self.auction_handle, self.user)
 
-def setup_bidder(sim, app_id, sender):
-    print('setup bidder')
-    call_application(sim, sender, {"call": "optin"}, app_id)
+    @trace
+    def close_out(self):
+        self.sim.close_out(self, self.auction_handle, self.user)
 
-    asset_opt_in_txn = build_asset_transaction(sender=sender,
-                                               token=SUPPLY_UNITS,
-                                               amount=0,
-    )
-    call_transaction(asset_opt_in_txn)
+    @trace
+    def enter_bid(self, amount):
+        # TODO need to check if auction is accepting bids first
+        self.sim.enter_bid(actx, self.auction_handle, self.user,
+                      Transaction(type=ASSET_TXN,
+                                  asset=BID_UNITS,
+                                  asset_receiver=self.find_escrow_handle(),
+                                  asset_close_to=0,
+                                  asset_sender=0,
+                                  asset_amount=amount,
+        ))
 
-def setup(sim):
-    app_id = setup_series(admin="ADMIN")
-    setup_bidder(sim, app_id, sender="ALICE")
-    setup_bidder(sim, app_id, sender="BOB")
-    setup_bidder(sim, app_id, sender="CHARLIE")
-    return app_id
+    @trace
+    def payout_bid(self, bidder):
+        # TODO must iterate over all bids
+        amount, remainder = self.compute_payout(bidder)
+        other_transaction = Transaction(type=ASSET_TXN,
+                                        asset=SUPPLY_UNITS,
+                                        asset_receiver=bidder,
+                                        asset_close_to=0,
+                                        asset_sender=0,
+                                        asset_amount=amount,
+        )
+        self.sim.payout_bid(self, self.auction_handle, bidder, other_transaction, remainder)
 
-def run_auction(ctx, admin, fund_holder):
-    deposit = build_asset_transaction(sender=fund_holder,
-                                      receiver=ctx.escrow(),
-                                      token=SUPPLY_UNITS,
-                                      amount=ctx.current_tranche_size(),
-    )
-    auction_open = build_application_transaction(sender=admin,
-                                                 args={"call": "open"},
-    )
-    call_group(ctx, deposit, auction_open)
+    @trace
+    def payout_auction(self):
+        bidders = self.sim.enumerate_bidders(self.auction_handle)
+        for bidder in bidders:
+            self.payout_bid(bidder)
+        
+    @trace
+    def destroy(self):
+        self.sim.destroy(self, self.auction_handle)
+        
 
-def enter_bid(ctx, bidder, amount):
-    bid_place = build_asset_transaction(sender=bidder,
-                                        receiver=ctx.escrow(),
-                                        token=BID_UNITS,
-                                        amount=amount,
-    )
-    bid_receipt = build_application_transaction(sender=bidder,
-                                                args={"call": "bid"},
-    )
-    call_group(ctx, bid_place, bid_receipt)
+sim = AuctionSimulator()
+esim = EscrowSimulator()
 
-def discharge_bid(ctx, bidder):
-    pass
+alice = "alice"
+bob = "bob"
+carol = "carol"
+dave = "dave"
+eve = "eve"
 
-def payout_bid(ctx, bidder):
-    pass
+actx = create_auction_with_sim(sim=sim, esim=esim, admin="alice", params=weekly_params)
+bctx = bind_auction_to_sim(sim=sim, esim=esim, ahand=actx.auction_handle, bidder="bob")
+cctx = bind_auction_to_sim(sim=sim, esim=esim, ahand=actx.auction_handle, bidder="carol")
+dctx = bind_auction_to_sim(sim=sim, esim=esim, ahand=actx.auction_handle, bidder="dave")
 
-def conclude_auction(ctx, admin, sink_account):
-    pass
+bctx.opt_in()
+cctx.opt_in()
+dctx.opt_in()
+dctx.close_out()
 
-sim=AuctionContractSimulator()
-setup(sim)
+for _ in range(actx.params["num_tranches"]):
+    actx.open_auction()
+
+    wait(actx.params["auction_duration"] - 100)
+
+    try:
+        actx.close_auction()
+    except:
+        pass
+    else:
+        raise(Exception("expected close to fail for deadline: now()={}, auction_deadline={}".format(now(), sim.auction_deadline)))
+
+    bctx.enter_bid(24 * 1000000)
+    cctx.enter_bid(49 * 1000000)
+
+    wait(300)
+
+    actx.close_auction()
+        
+actx.destroy()

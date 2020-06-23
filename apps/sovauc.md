@@ -27,11 +27,11 @@ All parameters below are unsigned 64-bit integers.
 ## Tranche computation
 
 If the index of the current tranche is less than $L$, return $t_0$.
-If $\sum r = 0$ or $\sum t < Sc$, return $m$.
+If $\sum r = 0$ or $Sc \leq \sum t$, return $m$.
 Otherwise, return the following:
 
 $$
-\frac{2 \sum r 100L (Sc - \sum t)}{LAc + T \sum r}
+\frac{2 \sum r (Sc - \sum t)}{LAc + T \sum r}
 $$
 
 ### Precision
@@ -46,9 +46,7 @@ this implies the difference is at most $10^{12}$.
 
 $$\sum r \leq 2 * 10^8 * 10^6 \leq 10^{14}$$ in units of tether and
 
-$$100L \leq 10^4,$$
-
-which implies the numerator is at most $2 * 10^{14} * 10^4 * 10^{12} \leq 10^{31}$.
+which implies the numerator is at most $2 * 10^{14} * 10^2 * 10^{12} \leq 10^{29}$.
 
 In the denominator,
 
@@ -59,7 +57,7 @@ $$T \leq 10^3, \sum r \leq 10^8 * 10^6 = 10^{14} \implies T \sum r \leq 10^{17}$
 which implies the denominator is at most $10^{18}$.
 
 If $n$ is the numerator and $d$ is the denominator, then there exists some
-$q \leq \frac{10^{31}}{10^{17}} = 10^{14}, r \leq 10^{17}$ such that $qd + r = n$ with
+$q \leq \frac{10^{29}}{10^{17}} = 10^{12}, r \leq 10^{17}$ such that $qd + r = n$ with
 $r < d$.
 
 Since $2^{63} \leq 10^{18}$, both $q$ and $r$ must fit in 63-bit unsigned integers.
@@ -76,10 +74,10 @@ with $t_i$ being the current tranche size.
 
 Assume that $\sum b \leq \sum r \leq 10^{14}$.
 
-Then $u$ receives a payout of $100 p_u = \frac{t_i b_u}{\sum b}$, or alternatively,
+Then $u$ receives a payout of $p_u = \frac{t_i b_u}{\sum b}$, or alternatively,
 
-$$100 p_u \sum b + r = t_i b_u$$
+$$p_u \sum b + r = t_i b_u$$
 
-where $r < 100 \sum b \leq 10^{16}$ is a 63-bit integer.
+where $r < \sum b \leq 10^{14}$ is a 63-bit integer.
 
 Division is not performed, so we are guaranteed no unnecessary loss in precision.

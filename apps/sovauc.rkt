@@ -302,12 +302,20 @@
                   (app-local-put! bid-receipts
                                   (- (app-local-gets 0 bid-receipts)
                                      ,(sovauc-value->num-bids '(gtxn 0 AssetAmount))))
-                  (app-local-put! outstanding-receipts
+                  (app-global-put! outstanding-receipts
                                   (- (app-global-gets outstanding-receipts)
                                      ,(sovauc-value->num-bids '(gtxn 0 AssetAmount))))
 
                   ;; TODO need a way to force receipt discharge?
                   ;; could do: can burn money iff receiver did not opt in...
+
+                  ;; TODO the principal for this is wrong: it must be <anyone>,
+                  ;; and the bidder must be specified as an account argument
+                  ;; otherwise, a bidder could simply refuse to cash in his receipt
+                  ;; because of this, this transaction must check that the receiver
+                  ;; of the earlier payment was the account argument
+
+                  ;; TODO must check that auction deadline has passed
 
                   (and (not (= (txn ApplicationID) 0))
                        (= (txn NumAppArgs) 0)
