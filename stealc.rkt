@@ -5,8 +5,12 @@
 (provide stealc)
 (provide stealc-bind)
 
+(define teal-target-version 2)
+
 (define [stealc prog]
-  (string-join (stealc-postprocess (stealc-lines (stealc-preprocess prog))) "\n"))
+  (string-join (cons (string-append "#pragma version " (number->string teal-target-version))
+                     (stealc-postprocess (stealc-lines (stealc-preprocess prog))))
+               "\n"))
 
 (define [stealc-lines prog]
   (if (list? prog)
@@ -100,7 +104,7 @@
             (list (string-append after-label ":")))))
 
 (define stealc-stateful-ops
-  '((app-opted-in app_opted_in)
+  '((app-opted-in? app_opted_in)
     (app-global-get app_global_get)
     (app-global-gets app_global_gets)
     (app-local-get app_local_get)
@@ -187,6 +191,11 @@
   (append (second (dq (rest lines)))
           (list (string-join (list "store" (first lines)) " "))))
 
+(define [stealc-reorder-store2 lines]
+  (append (second (dq (rest lines)))
+          (list (string-join (list "store" (first lines)))
+                (string-join (list "store" (second lines)) " "))))
+
 (define [stealc-reorder-note lines]
   (list (string-join (list "//" (first lines)))))
 
@@ -201,6 +210,7 @@
     (string ,stealc-reorder-string)
     (load ,stealc-reorder-load)
     (store! ,stealc-reorder-store)
+    (store2! ,stealc-reorder-store2)
     (note ,stealc-reorder-note)))
 
 ;; preprocess

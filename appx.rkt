@@ -4,6 +4,10 @@
 
 ;; printf "\nschema\n" && racket appx.rkt sectok && printf "\nheader\n" && racket appx.rkt -i sectok | jq | tee sectok.json && printf "\nclear\n" && racket appx.rkt -c sectok | tee sectok_clear.teal && printf "\napproval\n" && racket appx.rkt -p sectok | tee sectok_approve.teal
 
+;; TODO add sovauc-escrow here
+;; TODO header removed; reinsert later?
+;; printf "\nschema\n" && racket appx.rkt sovauc && printf "\nclear\n" && racket appx.rkt -c sovauc | tee sovauc_clear.teal && printf "\napproval\n" && racket appx.rkt -p sovauc | tee sovauc_approve.teal
+
 (require racket/cmdline)
 
 (require "stealc.rkt")
