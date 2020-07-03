@@ -6,7 +6,8 @@
 
 ;; TODO add sovauc-escrow here
 ;; TODO header removed; reinsert later?
-;; printf "\nschema\n" && racket appx.rkt sovauc && printf "\nclear\n" && racket appx.rkt -c sovauc | tee sovauc_clear.teal && printf "\napproval\n" && racket appx.rkt -p sovauc | tee sovauc_approve.teal
+
+;; printf "\nschema\n" && racket appx.rkt sovauc && printf "\nescrow\n" && racket appx.rkt -e sovauc | tee sovauc_escrow.teal && printf "\nclear\n" && racket appx.rkt -c sovauc | tee sovauc_clear.teal && printf "\napproval\n" && racket appx.rkt -p sovauc | tee sovauc_approve.teal
 
 (require racket/cmdline)
 
@@ -38,16 +39,17 @@
    #:args (app)
    app))
 
+;; suffix: 0x2087f7ac26536f1f5471074fc799b0b866d8abc4b60b53bbfd2a502da31f8eeaa6311022123120320312103111231231112412111031122512103115320312103116210412311022121031112312103113320312103115320312103120320312103301102412103301182817121037011a00241210113116240c311621050d1031203203121033020033030012103303003304001210330110241210330118281712103301052106121037011a00210612103302102212103302112312103302122512103302152912103303102212103303112412103303122512103303152912103304102105121033040825121033040929121011
 (define args
   '((TMPL_CREATOR "Q732YJSTN4PVI4IHJ7DZTMFYM3MKXRFWBNJ3X7JKKAW2GH4O5KTLVA3S6E")
     (TMPL_SUPPLY 10000000)
     (TMPL_DEFAULTFROZEN 1)
     (TMPL_OWNER "Q732YJSTN4PVI4IHJ7DZTMFYM3MKXRFWBNJ3X7JKKAW2GH4O5KTLVA3S6E")
     (TMPL_SOV 3)
-    (TMPL_USDC 5)
-    (TMPL_APPID 0x0000000000001040)
-    (TMPL_EPREFIX "0x02200704030500020106260208")
-    (TMPL_ESUFFIXH "0x14277ba76a368a0134253ea7238cb7f69f30b34b717750a4edaa617526ff83ce")))
+    (TMPL_USDC 5)))
+    ;; (TMPL_APPID 0x0000000000001040)))
+    ;; (TMPL_EPREFIX "0x02200704030500020107260208")
+    ;; (TMPL_ESUFFIXH "0x019b6ff68c9b836788e8a760acaad12fcaef621a6fb1f1bb28740b418685c3d4")))
 
 (define (stealc-flatten-begin-helper ast)
   (cond [(null? ast) ast]

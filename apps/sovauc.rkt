@@ -31,6 +31,8 @@
 (define sovauc-close-auction (sovauc-id!))
 (define sovauc-destroy (sovauc-id!))
 
+;; TODO escrow needs to check OnCompletion is not ClearState
+
 ;; (rec)  txn 0 pays fees and/or fills minbalance
 ;; (this) txn 1 opts in
 (define sovauc-escrow-setup
@@ -96,12 +98,14 @@
        ,sovauc-escrow-payout
        ,sovauc-escrow-close-auction))
 
-(define (sovauc-check-escrow escrow-address escrow-suffix)
-  `(and (= (sha512_256 ,escrow-suffix) (byte TMPL_ESUFFIXH))
-        (= ,escrow-address (sha512_256 (concat (byte "\"Program\"")
-                                               (byte TMPL_EPREFIX)
-                                               (itob (txn ApplicationID))
-                                               ,escrow-suffix)))))
+(define (sovauc-compute-escrow escrow-suffix)
+  `(sha512_256 (concat (byte "\"Program\"")
+                       (byte TMPL_EPREFIX)
+                       (itob (global CurrentApplicationID))
+                       ,escrow-suffix)))
+
+(define (sovauc-check-escrow escrow-suffix)
+  `(= (sha512_256 ,escrow-suffix) (byte TMPL_ESUFFIXH)))
 
 (define (verify-128-bit-division dividend1 dividend2 divisor quotient remainder)
   (let ([dividend-low (new-scratch!)]
@@ -117,7 +121,7 @@
        (store2! ,final-low ,carry (plusw ,remainder (load ,product-low)))
        (and (= (load ,dividend-high) (+ (load ,product-high) (load ,carry)))
             (= (load ,dividend-low) (load ,final-low))))))
-       
+
 ;; expects 4-decimal-digits of precision
 (define (sovauc-correct-tranche-size?
          tranche-size
@@ -132,60 +136,76 @@
          min-tranche-size
          tranche-ring-sum
          usdc-ring-sum)
-  `(cond [(< ,tranche-index ,lookback) (= ,tranche-size ,init-tranches-size)]
-         [(= ,usdc-ring-sum 0) (= ,min-tranche-size ,init-tranches-size)]
-         [(<= (* ,supply ,supply-pct-hths) ,tranche-ring-sum)
-          (= ,min-tranche-size ,init-tranches-size)]
-         [(>= ,remainder (+ (* ,lookback ,anchor ,supply-pct-hths)
-                            (* ,num-tranches ,usdc-ring-sum)))
-          0]
+  (let ([divisor (new-scratch!)])
+    `(begin
+       (note "correct tranche size check")
+       (store! ,divisor (+ (* ,lookback ,anchor ,supply-pct-hths)
+                           (* ,num-tranches ,usdc-ring-sum)))
 
-         [else ,(verify-128-bit-division `(* 2 ,usdc-ring-sum)
-                                         `(- (* ,supply ,supply-pct-hths) ,tranche-ring-sum)
-                                         `(+ (* ,lookback ,anchor ,supply-pct-hths)
-                                             (* ,num-tranches ,usdc-ring-sum))
-                                         tranche-size
-                                         remainder)]))
-                                        
-         ;; [else (= (+ ,remainder
-         ;;             (* ,tranche-size
-         ;;                (+ (* ,lookback ,anchor ,supply-pct-hths)
-         ;;                   (* ,num-tranches ,usdc-ring-sum))))
-         ;;          (* 2 ,usdc-ring-sum
-         ;;             (- (* ,supply ,supply-pct-hths) ,tranche-ring-sum)))]))
+       (cond [(< ,tranche-index ,lookback)
+              (= ,tranche-size ,init-tranches-size)]
+             [(or (= ,usdc-ring-sum 0)
+                  (<= (* ,supply ,supply-pct-hths) ,tranche-ring-sum))
+              (= ,tranche-size ,min-tranche-size)]
+             [(>= ,remainder (load ,divisor))
+              0]
+
+             [else ,(verify-128-bit-division `(* 2 ,usdc-ring-sum)
+                                             `(- (* ,supply ,supply-pct-hths) ,tranche-ring-sum)
+                                             `(load ,divisor)
+                                             tranche-size
+                                             remainder)]))))
 
 (define (sovauc-payout-value-ok? payout bid remainder auction-raised tranche-supply)
   `(and (< ,remainder ,auction-raised)
-        ;; TODO need wide ops here
         ,(verify-128-bit-division tranche-supply
                                   bid
                                   auction-raised
                                   payout
                                   remainder)))
-        ;; (= (+ (* ,payout ,auction-raised) ,remainder)
-        ;;    (* ,tranche-supply ,bid))))
 
-(define (sovauc-usdc-ring-old-usdc)
-  '(app-global-get (concat (byte 0x0001)
-                            (itob (% (app-global-get tranche-index)
-                                     (app-global-get lookback))))))
+;; (define (sovauc-usdc-ring-old-usdc)
+;;   '(app-global-get (concat (byte 0x0001)
+;;                             (itob (% (app-global-get tranche-index)
+;;                                      (app-global-get lookback))))))
 
-(define (sovauc-usdc-ring-new-usdc! val)
-  `(app-global-put! (concat (byte 0x0001)
-                            (itob (% (app-global-get tranche-index)
-                                     (app-global-get lookback))))
-                    ,val))
+;; (define (sovauc-usdc-ring-new-usdc! val)
+;;   `(app-global-put! (concat (byte 0x0001)
+;;                             (itob (% (app-global-get tranche-index)
+;;                                      (app-global-get lookback))))
+;;                     ,val))
 
-(define (sovauc-usdc-ring-old-tranche)
-  '(app-global-get (concat (byte 0x0002)
-                            (itob (% (app-global-get tranche-index)
-                                     (app-global-get lookback))))))
+;; (define (sovauc-usdc-ring-old-tranche)
+;;   '(app-global-get (concat (byte 0x0002)
+;;                             (itob (% (app-global-get tranche-index)
+;;                                      (app-global-get lookback))))))
 
-(define (sovauc-usdc-ring-new-tranche! val)
-  `(app-global-put! (concat (byte 0x0002)
-                            (itob (% (app-global-get tranche-index)
-                                     (app-global-get lookback))))
-                    ,val))
+;; (define (sovauc-usdc-ring-new-tranche! val)
+;;   `(app-global-put! (concat (byte 0x0002)
+;;                             (itob (% (app-global-get tranche-index)
+;;                                      (app-global-get lookback))))
+;;                     ,val))
+
+(define (sovauc-update-rings!)
+  (let ([index (new-scratch!)])
+    `(begin
+       (store! ,index (itob (% (app-global-get tranche-index) (app-global-get lookback))))
+
+       (app-global-put! usdc-ring-sum
+                        (+ (- (app-global-get usdc-ring-sum)
+                              (app-global-get (concat (byte 0x0001) (load ,index))))
+                           (app-global-get auction-raised)))
+
+       (app-global-put! (concat (byte 0x0001) (load ,index))
+                        (app-global-get auction-raised))
+
+       (app-global-put! tranche-ring-sum
+                        (+ (- (app-global-get tranche-ring-sum)
+                              (app-global-get (concat (byte 0x0002) (load ,index))))
+                           (app-global-get tranche-supply)))
+
+       (app-global-put! (concat (byte 0x0002) (load ,index))
+                        (app-global-get tranche-supply)))))
 
 (define sovauc-application
   ;; const; set at initialization
@@ -203,7 +223,7 @@
            (escrow (addr es))
 
            ;; updates per auction
-           ;; TODO change the rings so that they're an array of size 10
+           ;; TODO change the rings so that they're an array of size X
            (usdc-raised-ring  (int ur))
            (tranche-size-ring (int tz))
            (tranche-index     (int ti))
@@ -222,7 +242,7 @@
 
     (prog
      (with ([args (calltype)])
-           (cond [(= calltype ,sovauc-create)
+           (cond [(= (btoi calltype) ,sovauc-create)
                   (note "create")
                   (with ([args (init-anchor
                                 init-num-tranches
@@ -231,9 +251,12 @@
                                 init-init-tranches-size
                                 init-lookback
                                 init-min-tranche-size
-                                init-auction-duration)])
+                                init-auction-duration
+
+                                escrow-suffix)])
 
                         (app-global-put! admin (txn Sender))
+                        (app-global-put! escrow ,(sovauc-compute-escrow 'escrow-suffix))
 
                         (app-global-put! anchor (btoi init-anchor))
                         (app-global-put! num-tranches (btoi init-num-tranches))
@@ -241,31 +264,23 @@
                         (app-global-put! supply-pct-hths (btoi init-supply-pct-hths))
                         (app-global-put! init-tranches-size (btoi init-init-tranches-size))
                         (app-global-put! lookback (btoi init-lookback))
-                        (app-global-put! auction-deadline (btoi init-auction-duration))
+                        (app-global-put! min-tranche-size (btoi init-min-tranche-size))
+                        (app-global-put! auction-duration (btoi init-auction-duration))
 
-                        (and (= (txn ApplicationID) 0)
-                             (= (txn NumAppArgs) 9)
+                        (and ,(sovauc-check-escrow 'escrow-suffix)
+                             (= (txn ApplicationID) 0)
+                             (= (txn NumAppArgs) 10)
                              (= (txn NumAccounts) 0)
                              (= (txn OnCompletion) ,NoOp)))]
 
-                 [(= calltype ,sovauc-bind-escrow)
-                  (note "bind escrow")
-                  (with ([args (bind-escrow escrow-suffix)])
-                        (app-global-put! escrow bind-escrow)
-                        (and ,(sovauc-check-escrow 'bind-escrow 'escrow-suffix)
-                             (not (= (txn ApplicationID) 0))
-                             (= (txn NumAppArgs) 3)
-                             (= (txn NumAccounts) 0)
-                             (= (txn OnCompletion) ,NoOp)))]
-
-                 [(= calltype ,sovauc-optin)
+                 [(= (btoi calltype) ,sovauc-optin)
                   (note "optin")
                   (and (not (= (txn ApplicationID) 0))
                        (= (txn NumAppArgs) 1)
                        (= (txn NumAccounts) 0)
                        (= (txn OnCompletion) (int ,OptIn)))]
 
-                 [(= calltype ,sovauc-destroy)
+                 [(= (btoi calltype) ,sovauc-destroy)
                   (note "destroy")
                   (and (not (= (txn ApplicationID) 0))
                        (= (app-global-get tranche-index) (app-global-get num-tranches))
@@ -275,7 +290,7 @@
 
                  ;; (auth)         txn 0 funds escrow with tranche size
                  ;; (this = admin) txn 1 sets open auction state
-                 [(= calltype ,sovauc-open-auction)
+                 [(= (btoi calltype) ,sovauc-open-auction)
                   (note "open auction")
                   (with ([args (remainder)])
                         (assert (and (= (app-global-get auction-deadline) 0)
@@ -315,7 +330,7 @@
 
                  ;; (any)  txn 0 deposits into escrow
                  ;; (this) txn 1 puts receipts into bidder
-                 [(= calltype ,sovauc-enter-bid)
+                 [(= (btoi calltype) ,sovauc-enter-bid)
                   (note "enter bid")
                   (app-local-put! 0 bid-receipts (+ (app-local-get 0 bid-receipts)
                                                     (gtxn 0 AssetAmount)))
@@ -341,7 +356,7 @@
                  ;; (any)    txn 0 pays fees
                  ;; (escrow) txn 1 sends token to bidder
                  ;; (this)   txn 2 clears receipts
-                 [(= calltype ,sovauc-payout-bid)
+                 [(= (btoi calltype) ,sovauc-payout-bid)
                   (note "payout bid")
                   (with ([accs (bidder)]
                          [args (remainder)])
@@ -367,7 +382,7 @@
                              (= (txn OnCompletion) ,NoOp)))]
 
                  ;; (this) clears receipts
-                 [(= calltype ,sovauc-invalidate-bid)
+                 [(= (btoi calltype) ,sovauc-invalidate-bid)
                   (note "invalidate bid")
                   (with ([accs (bidder)])
 
@@ -376,6 +391,7 @@
                                             (app-local-get-acct bidder bid-receipts)))
                         (app-local-put-acct! bidder bid-receipts 0)
 
+                        ;; TODO app-opted-in? -> asset-opted-in?
                         (and (= (app-opted-in? bidder (int TMPL_SOV)) 0)
                              (not (< (global LatestTimestamp) (app-global-get auction-deadline)))
 
@@ -388,22 +404,11 @@
                  ;; (this = admin) txn 1 notifies the hardwired app to close the auction (and fails if it cannot)
                  ;; (escrow)       txn 2 and 3 move all leftover escrowed assets to the auction owner
                  ;; (escrow)       txn 4 closes account out to auction owner
-                 [(= calltype ,sovauc-close-auction)
+                 [(= (btoi calltype) ,sovauc-close-auction)
                   (note "close auction")
                   (assert (and (= (app-global-get outstanding-receipts) 0)
                                (not (< (global LatestTimestamp) (app-global-get auction-deadline)))))
-
-                  (app-global-put! usdc-ring-sum
-                                   (+ (- (app-global-get usdc-ring-sum)
-                                         ,(sovauc-usdc-ring-old-usdc))
-                                      (app-global-get auction-raised)))
-                  ,(sovauc-usdc-ring-new-usdc! '(app-global-get auction-raised))
-
-                  (app-global-put! tranche-ring-sum
-                                   (+ (- (app-global-get tranche-ring-sum)
-                                         ,(sovauc-usdc-ring-old-tranche))
-                                      (app-global-get tranche-supply)))
-                  ,(sovauc-usdc-ring-new-tranche! '(app-global-get tranche-supply))
+                  ,(sovauc-update-rings!)
 
                   (app-global-put! tranche-index (+ 1 (app-global-get tranche-index)))
 
@@ -416,6 +421,7 @@
                        (= (txn NumAppArgs) 0)
                        (= (txn NumAccounts) 0)
                        (= (txn OnCompletion) ,NoOp))]
+
                  [else 0])))
 
     (onclear (begin

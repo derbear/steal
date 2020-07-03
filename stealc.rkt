@@ -192,9 +192,9 @@
           (list (string-join (list "store" (first lines)) " "))))
 
 (define [stealc-reorder-store2 lines]
-  (append (second (dq (rest lines)))
-          (list (string-join (list "store" (first lines)))
-                (string-join (list "store" (second lines)) " "))))
+  (append (second (dq (rest (rest lines))))
+                   (list (string-join (list "store" (first lines)))
+                         (string-join (list "store" (second lines)) " "))))
 
 (define [stealc-reorder-note lines]
   (list (string-join (list "//" (first lines)))))
