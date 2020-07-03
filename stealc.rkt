@@ -193,8 +193,13 @@
 
 (define [stealc-reorder-store2 lines]
   (append (second (dq (rest (rest lines))))
-                   (list (string-join (list "store" (first lines)))
-                         (string-join (list "store" (second lines)) " "))))
+          (list (string-join (list "store" (first lines)) " ")
+                (string-join (list "store" (second lines)) " "))))
+
+(define [stealc-reorder-asset-holding-get lines]
+  (append (second (dq (second (dq lines))))
+          (list (string-join (list (last lines)
+                                   (last (second (dq lines))))))))
 
 (define [stealc-reorder-note lines]
   (list (string-join (list "//" (first lines)))))
@@ -211,6 +216,7 @@
     (load ,stealc-reorder-load)
     (store! ,stealc-reorder-store)
     (store2! ,stealc-reorder-store2)
+    (asset_holding_get ,stealc-reorder-asset-holding-get)
     (note ,stealc-reorder-note)))
 
 ;; preprocess

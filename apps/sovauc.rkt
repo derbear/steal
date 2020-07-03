@@ -217,6 +217,13 @@
        (app-global-put! (concat (byte 0x0002) (load ,index))
                         (app-global-get tranche-supply)))))
 
+(define (asset-opted-in? acct asset)
+  (let ([opted-in (new-scratch!)])
+    `(begin
+       (store! ,opted-in (asset_holding_get ,acct ,asset AssetBalance))
+       (pop)
+       (load ,opted-in))))
+
 ;; available actions (indexed by either (OnCompletion) or number of (accounts, arguments))
 ;; [E] represents an action that groups with an escrow
 ;; (0, 12)  -> create auction series
@@ -353,9 +360,8 @@
                                (= (gtxn 2 AssetReceiver) bidder))
 
                           ;; invalidate
-                          ;; TODO app-opted-in? -> asset-opted-in?
                           (and (= (txn NumAppArgs) 0)
-                               (= (app-opted-in? bidder (app-global-get sale-asset)) 0)))))]
+                               (= ,(asset-opted-in? 'bidder '(app-global-get sale-asset)) 0)))))]
 
           [else
            (assert (and (= (txn NumAccounts) 0)

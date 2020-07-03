@@ -238,7 +238,8 @@
                               local-args
                               local-accs
                               (second ast))]
-        [(or (eq? (first ast) 'app-opted-in?)
+        [(or (eq? (first ast) 'asset_holding_get)
+             (eq? (first ast) 'app-opted-in?)
              (eq? (first ast) 'app-local-get-acct)
              (eq? (first ast) 'app-local-gets-acct)
              (eq? (first ast) 'app-local-put-acct!)
@@ -246,7 +247,7 @@
          (cons (string->symbol (string-replace (symbol->string (first ast))
                                                "-acct"
                                                ""))
-                                
+
                (cons (app-acc-rewrite (app-program-helper (second ast) params global-vars local-vars local-args local-accs))
                      (app-program-helper (rest (rest ast)) params global-vars local-vars local-args local-accs)))]
 
