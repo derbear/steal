@@ -31,72 +31,80 @@
 (define sovauc-close-auction (sovauc-id!))
 (define sovauc-destroy (sovauc-id!))
 
-;; TODO escrow needs to check OnCompletion is not ClearState
-
-;; (rec)  txn 0 pays fees and/or fills minbalance
-;; (this) txn 1 opts in
+;; <group-0>
+;; (rec)   txn 0 pays fees and fills minbalance
+;; (admin) txn 1 opens auction
+;; (this)  txn 2 and 3 opt into tokens
+;; (any)   txn 4 funds auction with tranche size
 (define sovauc-escrow-setup
-  '(and (= (txn TypeEnum) 4)
+  `(and (< (txn GroupIndex) 4)
+        (> (txn GroupIndex) 1)
         (= (txn RekeyTo) (global ZeroAddress))
-        ;; ignore fee; account is "ephemeral"
-        (or (= (txn XferAsset) (int TMPL_SOV))
-            (= (txn XferAsset) (int TMPL_USDC)))
-        (= (txn AssetAmount) 0)
-        (= (txn AssetCloseTo) (global ZeroAddress))))
 
+        (= (gtxn 2 Sender) (gtxn 3 Sender))
+
+        (= (gtxn 1 TypeEnum) 6)
+        (= (gtxn 1 ApplicationID) (btoi (byte TMPL_APPID)))
+        (= (gtxn 1 NumAccounts) 0)
+        (= (gtxn 1 NumAppArgs) 1)
+        (= (gtxn 1 OnCompletion) ,NoOp)
+
+        (= (gtxn 2 TypeEnum) 4)
+        (= (gtxn 2 AssetAmount) 0)
+        (= (gtxn 2 AssetCloseTo) (global ZeroAddress))
+
+        (= (gtxn 3 TypeEnum) 4)
+        (= (gtxn 3 AssetAmount) 0)
+        (= (gtxn 3 AssetCloseTo) (global ZeroAddress))))
+
+;; <group-1>
 ;; (rec)  txn 0 pays fees
-;; (any)  txn 1 payouts the bid in the hardwired app (and fails if it cannot)
+;; (any)  txn 1 pays out the bid in the hardwired app or fails if it cannot
 ;; (this) txn 2 pays out the token
 (define sovauc-escrow-payout
   `(and (= (txn GroupIndex) 2)
-
-        (= (txn TypeEnum) 4)
-        (= (txn XferAsset) (int TMPL_SOV))
-        (= (txn AssetSender) (global ZeroAddress))
-        (= (txn AssetCloseTo) (global ZeroAddress))
         (= (txn RekeyTo) (global ZeroAddress))
 
-        (= (gtxn 1 TypeEnum) 5)
+        (= (gtxn 1 TypeEnum) 6)
         (= (gtxn 1 ApplicationID) (btoi (byte TMPL_APPID)))
-        (= (gtxn 1 ApplicationArgs 0) ,sovauc-payout-bid)))
+        ;; (= (gtxn 1 NumAccounts) 1) ;; checked earlier
+        (= (gtxn 1 NumAppArgs) 1)
+        (= (gtxn 1 OnCompletion) ,NoOp)
 
-;; (satisfies-xchange-rate? (gtxn 1 ApplicationArgs 1) (txn AssetAmount))))
-;; enforced by app
+        (= (gtxn 2 TypeEnum) 4)))
 
-;; (rec)  txn 0 pays fees (recommended)
-;; (auth) txn 1 notifies the hardwired app to close the auction (and fails if it cannot)
-;; (this) txn 2 and 3 move all leftover escrowed assets to the auction owner
-;; (this) txn 4 closes account out to auction owner
+;; <group-2>
+;; (rec)   txn 0 pays fees (recommended)
+;; (admin) txn 1 destroys the app or fails
+;; (this)  txn 2 and 3 move all leftover escrowed assets to the seller
+;; (this)  txn 4 closes account out to seller
 (define sovauc-escrow-close-auction
   `(and (< (txn GroupIndex) 5)
         (> (txn GroupIndex) 1)
         (= (txn RekeyTo) (global ZeroAddress))
+
         (= (gtxn 2 Sender) (gtxn 3 Sender))
         (= (gtxn 3 Sender) (gtxn 4 Sender))
 
-        (= (gtxn 1 TypeEnum) 5)
+        (= (gtxn 1 TypeEnum) 6)
         (= (gtxn 1 ApplicationID) (btoi (byte TMPL_APPID)))
-        (= (gtxn 1 Note) ,sovauc-close-auction)
-        (= (gtxn 1 ApplicationArgs 0) ,sovauc-close-auction)
+        (= (gtxn 1 NumAccounts) 0)
+        (= (gtxn 1 NumAppArgs) 2)
+        (= (gtxn 1 OnCompletion) ,NoOp)
 
         (= (gtxn 2 TypeEnum) 4)
-        (= (gtxn 2 XferAsset) (int TMPL_SOV))
         (= (gtxn 2 AssetAmount) 0)
-        (= (gtxn 2 AssetCloseTo) (addr TMPL_OWNER))
 
         (= (gtxn 3 TypeEnum) 4)
-        (= (gtxn 3 XferAsset) (int TMPL_USDC))
         (= (gtxn 3 AssetAmount) 0)
-        (= (gtxn 3 AssetCloseTo) (addr TMPL_OWNER))
 
         (= (gtxn 4 TypeEnum) 1)
-        (= (gtxn 4 Amount) 0)
-        (= (gtxn 4 CloseRemainderTo) (addr TMPL_OWNER))))
+        (= (gtxn 4 Amount) 0)))
 
 (define sovauc-escrow
-  `(or ,sovauc-escrow-setup
-       ,sovauc-escrow-payout
-       ,sovauc-escrow-close-auction))
+  `(cond [(= (gtxn 1 NumAccounts) 1) ,sovauc-escrow-payout]
+         [(= (gtxn 1 NumAppArgs) 1) ,sovauc-escrow-setup]
+         [else ,sovauc-escrow-close-auction]))
 
 (define (sovauc-compute-escrow escrow-suffix)
   `(sha512_256 (concat (byte "\"Program\"")
@@ -126,12 +134,14 @@
 (define (sovauc-correct-tranche-size?
          tranche-size
          remainder
+
          anchor
          tranche-index
          num-tranches
          init-tranches-size
          supply
          supply-pct-hths
+
          lookback
          min-tranche-size
          tranche-ring-sum
@@ -207,9 +217,25 @@
        (app-global-put! (concat (byte 0x0002) (load ,index))
                         (app-global-get tranche-supply)))))
 
+;; available actions (indexed by either (OnCompletion) or number of (accounts, arguments))
+;; [E] represents an action that groups with an escrow
+;; (0, 12)  -> create auction series
+;; (optin)  -> opt into auction
+;; (0, 1)   ->   open auction [E]     (when no open auctions)
+;; (0, 0)   ->     enter bids         (before deadline)
+;; (1, 1)   ->       payout bid [E]   (after deadline)
+;; (1, 0)   ->       destroy bid      (after deadline)
+;; (clear)  ->      forefeit bid
+;; (0, 2)   ->   close auction [E]    (after deadline)
+;; (delete) -> destroy auction series (when last auction has closed)
 (define sovauc-application
   ;; const; set at initialization
-  `((gvars (admin              (addr ax))
+  `((gvars (admin  (addr ax))
+           (seller (addr sx))
+
+           (bid-asset  (int b$))
+           (sale-asset (int s$))
+
            (anchor             (int ac))
            (num-tranches       (int nt))
            (supply             (int sp))
@@ -241,188 +267,199 @@
     (lvars (bid-receipts (int br)))
 
     (prog
-     (with ([args (calltype)])
-           (cond [(= (btoi calltype) ,sovauc-create)
-                  (note "create")
-                  (with ([args (init-anchor
-                                init-num-tranches
-                                init-supply
-                                init-supply-pct-hths
-                                init-init-tranches-size
-                                init-lookback
-                                init-min-tranche-size
-                                init-auction-duration
+     (cond
+       [(= (txn ApplicationID) 0)
+        (note "create")
+        (with ([args (init-seller
 
-                                escrow-suffix)])
+                      init-bid-asset
+                      init-sale-asset
 
-                        (app-global-put! admin (txn Sender))
-                        (app-global-put! escrow ,(sovauc-compute-escrow 'escrow-suffix))
+                      init-anchor
+                      init-num-tranches
+                      init-supply
+                      init-supply-pct-hths
+                      init-init-tranches-size
+                      init-lookback
+                      init-min-tranche-size
+                      init-auction-duration
 
-                        (app-global-put! anchor (btoi init-anchor))
-                        (app-global-put! num-tranches (btoi init-num-tranches))
-                        (app-global-put! supply (btoi init-supply))
-                        (app-global-put! supply-pct-hths (btoi init-supply-pct-hths))
-                        (app-global-put! init-tranches-size (btoi init-init-tranches-size))
-                        (app-global-put! lookback (btoi init-lookback))
-                        (app-global-put! min-tranche-size (btoi init-min-tranche-size))
-                        (app-global-put! auction-duration (btoi init-auction-duration))
+                      escrow-suffix)])
 
-                        (and ,(sovauc-check-escrow 'escrow-suffix)
-                             (= (txn ApplicationID) 0)
-                             (= (txn NumAppArgs) 10)
-                             (= (txn NumAccounts) 0)
-                             (= (txn OnCompletion) ,NoOp)))]
+              (app-global-put! admin (txn Sender))
+              (app-global-put! seller init-seller)
+              (app-global-put! escrow ,(sovauc-compute-escrow 'escrow-suffix))
 
-                 [(= (btoi calltype) ,sovauc-optin)
-                  (note "optin")
-                  (and (not (= (txn ApplicationID) 0))
-                       (= (txn NumAppArgs) 1)
-                       (= (txn NumAccounts) 0)
-                       (= (txn OnCompletion) (int ,OptIn)))]
+              (app-global-put! bid-asset (btoi init-bid-asset))
+              (app-global-put! sale-asset (btoi init-sale-asset))
 
-                 [(= (btoi calltype) ,sovauc-destroy)
-                  (note "destroy")
-                  (and (not (= (txn ApplicationID) 0))
-                       (= (app-global-get tranche-index) (app-global-get num-tranches))
-                       (= (txn NumAppArgs) 1)
-                       (= (txn NumAccounts) 0)
-                       (= (txn OnCompletion) (int ,DeleteApplication)))]
+              (app-global-put! anchor (btoi init-anchor))
+              (app-global-put! num-tranches (btoi init-num-tranches))
+              (app-global-put! supply (btoi init-supply))
+              (app-global-put! supply-pct-hths (btoi init-supply-pct-hths))
+              (app-global-put! init-tranches-size (btoi init-init-tranches-size))
+              (app-global-put! lookback (btoi init-lookback))
+              (app-global-put! min-tranche-size (btoi init-min-tranche-size))
+              (app-global-put! auction-duration (btoi init-auction-duration))
 
-                 ;; (auth)         txn 0 funds escrow with tranche size
-                 ;; (this = admin) txn 1 sets open auction state
-                 [(= (btoi calltype) ,sovauc-open-auction)
-                  (note "open auction")
-                  (with ([args (remainder)])
-                        (assert (and (= (app-global-get auction-deadline) 0)
-                                     (< (app-global-get tranche-index)
-                                        (app-global-get num-tranches))))
+              (and ,(sovauc-check-escrow 'escrow-suffix)
+                   (= (txn ApplicationID) 0)
+                   (= (txn NumAppArgs) 12)
+                   (= (txn NumAccounts) 0)
+                   (= (txn OnCompletion) ,NoOp)))]
 
-                        (app-global-put! tranche-supply (gtxn 0 AssetAmount))
-                        (app-global-put! auction-deadline
-                                         (+ (global LatestTimestamp)
-                                            (app-global-get auction-duration)))
+       [(or (= (txn OnCompletion) (int ,OptIn))
+            (= (txn OnCompletion) (int ,DeleteApplication)))
+        (note "optin/destroy")
+        (and (= (txn NumAppArgs) 0)
+             (= (txn NumAccounts) 0)
+             (or (= (txn OnCompletion) (int ,OptIn))
+                 (= (app-global-get tranche-index) (app-global-get num-tranches))))]
 
-                        (and (= (txn GroupIndex) 1)
-                             (= (txn Sender) (app-global-get admin))
-                             (not (= (txn ApplicationID) 0))
-                             (= (txn NumAppArgs) 1)
-                             (= (txn NumAccounts) 0)
-                             (= (txn OnCompletion) ,NoOp)
+       [else
+        (assert (= (txn OnCompletion) (int ,NoOp)))
 
-                             (= (gtxn 0 TypeEnum) 4)
-                             (= (gtxn 0 XferAsset) (int TMPL_SOV))
-                             ,(sovauc-correct-tranche-size?
-                               '(gtxn 0 AssetAmount)
-                               '(btoi remainder)
-                               '(app-global-get anchor)
-                               '(app-global-get tranche-index)
-                               '(app-global-get num-tranches)
-                               '(app-global-get supply)
-                               '(app-global-get supply-pct-hths)
-                               '(app-global-get init-tranches-size)
-                               '(app-global-get lookback)
-                               '(app-global-get min-tranche-size)
-                               '(app-global-get tranche-ring-sum)
-                               '(app-global-get usdc-ring-sum))
-                             (= (gtxn 0 AssetReceiver) (app-global-get escrow))
-                             (= (gtxn 0 AssetCloseTo) (global ZeroAddress))
-                             (not (= (gtxn 0 AssetSender) (global ZeroAddress)))))]
+        (cond
+          [(= (txn NumAccounts) 1)
+           (note "payout/invalidate bid")
+           (with ([accs (bidder)]
+                  [args (remainder)])
 
-                 ;; (any)  txn 0 deposits into escrow
-                 ;; (this) txn 1 puts receipts into bidder
-                 [(= (btoi calltype) ,sovauc-enter-bid)
-                  (note "enter bid")
-                  (app-local-put! 0 bid-receipts (+ (app-local-get 0 bid-receipts)
-                                                    (gtxn 0 AssetAmount)))
-                  (app-global-put! outstanding-receipts
-                                   (+ (app-global-get outstanding-receipts)
-                                      (gtxn 0 AssetAmount)))
-                  (app-global-put! auction-raised
-                                   (+ (app-global-get auction-raised)
-                                      (gtxn 0 AssetAmount)))
+                 (unless (= (txn NumAppArgs) 0)
+                   (assert ,(sovauc-payout-value-ok?
+                             '(gtxn 0 AssetAmount)
+                             '(app-local-get-acct bidder bid-receipts)
+                             '(btoi remainder)
+                             '(app-global-get auction-raised)
+                             '(app-global-get tranche-supply))))
 
-                  (and (= (txn GroupIndex) 1)
-                       (not (= (txn ApplicationID) 0))
-                       (= (txn NumAppArgs) 1)
-                       (= (txn NumAccounts) 0)
-                       (= (txn OnCompletion) ,NoOp)
-                       (< (global LatestTimestamp) (app-global-get auction-deadline))
+                 (app-global-put! outstanding-receipts
+                                  (- (app-global-get outstanding-receipts)
+                                     (app-local-get-acct bidder bid-receipts)))
+                 (app-local-del-acct! bidder bid-receipts)
 
-                       (= (gtxn 0 TypeEnum) 4)
-                       (= (gtxn 0 XferAsset) (int TMPL_USDC))
-                       (= (gtxn 0 AssetReceiver) (app-global-get escrow))
-                       (= (gtxn 0 AssetSender) (global ZeroAddress)))]
+                 (and (not (< (global LatestTimestamp) (app-global-get auction-deadline)))
 
-                 ;; (any)    txn 0 pays fees
-                 ;; (escrow) txn 1 sends token to bidder
-                 ;; (this)   txn 2 clears receipts
-                 [(= (btoi calltype) ,sovauc-payout-bid)
-                  (note "payout bid")
-                  (with ([accs (bidder)]
-                         [args (remainder)])
+                      ;; payout
+                      ;; <group-1>
+                      ;; (rec)  txn 0 pays fees
+                      ;; (this) txn 1 pays out the bid in the hardwired app or fails if it cannot
+                      ;; (escr) txn 2 pays out the token
+                      (or (and (= (txn NumAppArgs) 1)
+                               (= (txn GroupIndex) 1)
 
-                        (assert ,(sovauc-payout-value-ok?
-                                  '(gtxn 0 AssetAmount)
-                                  '(app-local-get-acct bidder bid-receipts)
-                                  '(btoi remainder)
-                                  '(app-global-get auction-raised)
-                                  '(app-local-get-acct bidder tranche-supply)))
+                               (= (gtxn 2 Sender) (app-global-get escrow))
+                               (= (gtxn 2 XferAsset) (app-global-get sale-asset))
+                               (= (gtxn 2 AssetReceiver) bidder))
 
-                        (app-global-put! outstanding-receipts
-                                         (- (app-global-get outstanding-receipts)
-                                            (app-local-get-acct bidder bid-receipts)))
-                        (app-local-put-acct! bidder bid-receipts 0)
+                          ;; invalidate
+                          ;; TODO app-opted-in? -> asset-opted-in?
+                          (and (= (txn NumAppArgs) 0)
+                               (= (app-opted-in? bidder (app-global-get sale-asset)) 0)))))]
 
-                        (and (not (< (global LatestTimestamp) (app-global-get auction-deadline)))
+          [else
+           (assert (and (= (txn NumAccounts) 0)
+                        (< (txn NumAppArgs) 3)))
 
-                             (= (txn GroupIndex) 2)
-                             (not (= (txn ApplicationID) 0))
-                             (= (txn NumAppArgs) 1)
-                             (= (txn NumAccounts) 1)
-                             (= (txn OnCompletion) ,NoOp)))]
+           (cond
+             [(= (txn NumAppArgs) 1)
+              (note "open auction")
+              (with ([args (remainder)])
+                    (assert (and (= (app-global-get auction-deadline) 0)
+                                 (< (app-global-get tranche-index)
+                                    (app-global-get num-tranches))))
 
-                 ;; (this) clears receipts
-                 [(= (btoi calltype) ,sovauc-invalidate-bid)
-                  (note "invalidate bid")
-                  (with ([accs (bidder)])
+                    (app-global-put! tranche-supply (gtxn 4 AssetAmount))
+                    (app-global-put! auction-deadline
+                                     (+ (global LatestTimestamp)
+                                        (app-global-get auction-duration)))
 
-                        (app-global-put! outstanding-receipts
-                                         (- (app-global-get outstanding-receipts)
-                                            (app-local-get-acct bidder bid-receipts)))
-                        (app-local-put-acct! bidder bid-receipts 0)
+                    ;; <group-0>
+                    ;; (rec)        txn 0 pays fees and fills minbalance
+                    ;; (this=admin) txn 1 opens auction
+                    ;; (escr)       txn 2 and 3 opt into tokens
+                    ;; (any)        txn 4 funds auction with tranche size
+                    (and (= (txn GroupIndex) 1)
+                         (= (txn Sender) (app-global-get admin))
 
-                        ;; TODO app-opted-in? -> asset-opted-in?
-                        (and (= (app-opted-in? bidder (int TMPL_SOV)) 0)
-                             (not (< (global LatestTimestamp) (app-global-get auction-deadline)))
+                         (= (gtxn 2 Sender) (app-global-get escrow))
+                         (= (gtxn 2 XferAsset) (app-global-get bid-asset))
 
-                             (not (= (txn ApplicationID) 0))
-                             (= (txn NumAppArgs) 1)
-                             (= (txn NumAccounts) 1)
-                             (= (txn OnCompletion) ,NoOp)))]
+                         (= (gtxn 3 XferAsset) (app-global-get sale-asset))
 
-                 ;; (rec)          txn 0 pays fees (recommended)
-                 ;; (this = admin) txn 1 notifies the hardwired app to close the auction (and fails if it cannot)
-                 ;; (escrow)       txn 2 and 3 move all leftover escrowed assets to the auction owner
-                 ;; (escrow)       txn 4 closes account out to auction owner
-                 [(= (btoi calltype) ,sovauc-close-auction)
-                  (note "close auction")
-                  (assert (and (= (app-global-get outstanding-receipts) 0)
-                               (not (< (global LatestTimestamp) (app-global-get auction-deadline)))))
-                  ,(sovauc-update-rings!)
+                         (= (gtxn 4 TypeEnum) 4)
+                         (= (gtxn 4 XferAsset) (app-global-get sale-asset))
+                         (= (gtxn 4 AssetReceiver) (app-global-get escrow))
+                         ,(sovauc-correct-tranche-size?
+                           '(gtxn 4 AssetAmount)
+                           '(btoi remainder)
 
-                  (app-global-put! tranche-index (+ 1 (app-global-get tranche-index)))
+                           '(app-global-get anchor)
+                           '(app-global-get tranche-index)
+                           '(app-global-get num-tranches)
+                           '(app-global-get init-tranches-size)
+                           '(app-global-get supply)
+                           '(app-global-get supply-pct-hths)
 
-                  (app-global-del! auction-raised)
-                  (app-global-del! tranche-supply)
-                  (app-global-del! auction-deadline)
+                           '(app-global-get lookback)
+                           '(app-global-get min-tranche-size)
+                           '(app-global-get tranche-ring-sum)
+                           '(app-global-get usdc-ring-sum))))]
 
-                  (and (= (txn Sender) (app-global-get admin))
-                       (not (= (txn ApplicationID) 0))
-                       (= (txn NumAppArgs) 0)
-                       (= (txn NumAccounts) 0)
-                       (= (txn OnCompletion) ,NoOp))]
+             [(= (txn NumAppArgs) 2)
+              ;; both arguments are ignored
+              (note "close auction")
 
-                 [else 0])))
+              (assert (not (< (global LatestTimestamp) (app-global-get auction-deadline))))
+
+              ,(sovauc-update-rings!)
+
+              (app-global-put! tranche-index (+ 1 (app-global-get tranche-index)))
+
+              (app-global-del! auction-raised)
+              (app-global-del! tranche-supply)
+              (app-global-del! auction-deadline)
+              ;; <group-2>
+              ;; (rec)        txn 0 pays fees (recommended)
+              ;; (this=admin) txn 1 destroys the app or fails
+              ;; (escrow)     txn 2 and 3 move all leftover escrowed assets to the seller
+              ;; (escrow)     txn 4 closes account out to seller
+              (and (= (txn GroupIndex) 1)
+                   (= (txn Sender) (app-global-get admin))
+                   (= (app-global-get outstanding-receipts) 0)
+
+                   (= (gtxn 2 Sender) (app-global-get escrow))
+
+                   (= (gtxn 2 XferAsset) (app-global-get bid-asset))
+                   (= (gtxn 2 AssetCloseTo) (app-global-get seller))
+
+                   (= (gtxn 3 XferAsset) (app-global-get sale-asset))
+                   (= (gtxn 3 AssetCloseTo) (app-global-get seller))
+
+                   (= (gtxn 4 CloseRemainderTo) (app-global-get seller)))]
+
+             ;; <group-4>
+             ;; (any)  txn 0 deposits into escrow
+             ;; (this) txn 1 puts receipts into bidder
+             [else
+              (note "enter bid")
+
+              (app-local-put! 0 bid-receipts (+ (app-local-get 0 bid-receipts)
+                                                (gtxn 0 AssetAmount)))
+              (app-global-put! outstanding-receipts
+                               (+ (app-global-get outstanding-receipts)
+                                  (gtxn 0 AssetAmount)))
+              (app-global-put! auction-raised
+                               (+ (app-global-get auction-raised)
+                                  (gtxn 0 AssetAmount)))
+
+              (and (< (global LatestTimestamp) (app-global-get auction-deadline))
+
+                   (= (txn GroupIndex) 1)
+
+                   (= (gtxn 0 TypeEnum) 4)
+                   (= (gtxn 0 XferAsset) (app-global-get bid-asset))
+                   (= (gtxn 0 AssetReceiver) (app-global-get escrow)))])])]))
 
     (onclear (begin
                (app-global-put! outstanding-receipts

@@ -241,7 +241,8 @@
         [(or (eq? (first ast) 'app-opted-in?)
              (eq? (first ast) 'app-local-get-acct)
              (eq? (first ast) 'app-local-gets-acct)
-             (eq? (first ast) 'app-local-put-acct!))
+             (eq? (first ast) 'app-local-put-acct!)
+             (eq? (first ast) 'app-local-del-acct!))
          (cons (string->symbol (string-replace (symbol->string (first ast))
                                                "-acct"
                                                ""))
