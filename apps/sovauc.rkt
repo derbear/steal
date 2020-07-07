@@ -46,7 +46,7 @@
         (= (gtxn 1 TypeEnum) 6)
         (= (gtxn 1 ApplicationID) (btoi (byte TMPL_APPID)))
         (= (gtxn 1 NumAccounts) 0)
-        (= (gtxn 1 NumAppArgs) 1)
+        ;; (= (gtxn 1 NumAppArgs) 1) ;; checked earlier
         (= (gtxn 1 OnCompletion) ,NoOp)
 
         (= (gtxn 2 TypeEnum) 4)
@@ -334,7 +334,7 @@
 
                  (unless (= (txn NumAppArgs) 0)
                    (assert ,(sovauc-payout-value-ok?
-                             '(gtxn 0 AssetAmount)
+                             '(gtxn 2 AssetAmount)
                              '(app-local-get-acct bidder bid-receipts)
                              '(btoi remainder)
                              '(app-global-get auction-raised)
@@ -352,8 +352,8 @@
                       ;; (rec)  txn 0 pays fees
                       ;; (this) txn 1 pays out the bid in the hardwired app or fails if it cannot
                       ;; (escr) txn 2 pays out the token
-                      (or (and (= (txn NumAppArgs) 1)
-                               (= (txn GroupIndex) 1)
+                      (if (= (txn NumAppArgs) 1)
+                          (and (= (txn GroupIndex) 1)
 
                                (= (gtxn 2 Sender) (app-global-get escrow))
                                (= (gtxn 2 XferAsset) (app-global-get sale-asset))
