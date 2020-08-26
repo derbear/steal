@@ -8,8 +8,8 @@
 
 (define (sectok-lget addr key)
   (if (equal? addr '(txn Sender))
-      `(app-local-gets 0 ,key)
-      `(app-local-gets-acct ,addr ,key)))
+      `(app-local-get 0 ,key)
+      `(app-local-get-acct ,addr ,key)))
 
 (define (sectok-lset! addr key val)
   (if (equal? addr '(txn Sender))
@@ -36,7 +36,7 @@
 ;; note: snd and rcv are integers
 (define (sectok-xfer-allowed? snd rcv)
   ;; possible underflow is deliberate
-  `(< (- (app-global-gets ,(sectok-rule-key `(itob ,snd) `(itob ,rcv))) 1)
+  `(< (- (app-global-get ,(sectok-rule-key `(itob ,snd) `(itob ,rcv))) 1)
       (global LatestTimestamp)))
 
 ;; separate upgrade key
@@ -159,14 +159,14 @@
         (note "destroy")
         (and (= (txn NumAppArgs) 0)
              (= (txn NumAccounts) 0)
-             (= (app-local-gets 0 contract-admin) 1)
-             (= (app-global-gets reserve-supply) (app-global-gets total-supply)))]
+             (= (app-local-get 0 contract-admin) 1)
+             (= (app-global-get reserve-supply) (app-global-get total-supply)))]
 
        [(= (txn OnCompletion) ,UpdateApplication)
         (note "upgrade")
         (and (= (txn NumAppArgs) 0)
              (= (txn NumAccounts) 0)
-             (= (app-local-gets 0 contract-admin) 1))]
+             (= (app-local-get 0 contract-admin) 1))]
 
        [(= (txn OnCompletion) ,OptIn)
         (note "opt-in")
@@ -182,7 +182,7 @@
                 (with ([args (new-paused)])
                       (note "pause")
                       (app-global-put! paused (btoi new-paused))
-                      (= (app-local-gets 0 contract-admin) 1))
+                      (= (app-local-get 0 contract-admin) 1))
 
                 (with ([args (send-group receive-group new-lock-until)])
                       (note "transfer-rule")
@@ -194,21 +194,21 @@
                       (and (= (len send-group) 8)
                            (= (len receive-group) 8)
                            (= (txn NumAppArgs) 3)
-                           (= (app-local-gets 0 transfer-admin) 1))))
+                           (= (app-local-get 0 transfer-admin) 1))))
 
             (if (= (txn NumAppArgs) 1)
                  (with ([accs (receiver)]
                         [args (amount)])
                        (note "transfer")
                        ,(sectok-move! '(txn Sender) 'receiver '(btoi amount))
-                       (and (= (app-global-gets paused) 0)
-                            (<= (app-local-gets-acct receiver balance) (app-local-gets-acct receiver max-balance))
-                            (= (app-local-gets 0 frozen) 0)
-                            (= (app-local-gets-acct receiver frozen) 0)
-                            (< (app-local-gets 0 lock-until) (global LatestTimestamp))
-                            (< (app-local-gets-acct receiver lock-until) (global LatestTimestamp))
-                            ,(sectok-xfer-allowed? '(app-local-gets 0 transfer-group)
-                                                   '(app-local-gets-acct receiver transfer-group))))
+                       (and (= (app-global-get paused) 0)
+                            (<= (app-local-get-acct receiver balance) (app-local-get-acct receiver max-balance))
+                            (= (app-local-get 0 frozen) 0)
+                            (= (app-local-get-acct receiver frozen) 0)
+                            (< (app-local-get 0 lock-until) (global LatestTimestamp))
+                            (< (app-local-get-acct receiver lock-until) (global LatestTimestamp))
+                            ,(sectok-xfer-allowed? '(app-local-get 0 transfer-group)
+                                                   '(app-local-get-acct receiver transfer-group))))
 
                  (with ([accs (target)]
                         [args (key value)])
@@ -217,32 +217,33 @@
                        (cond [(or (= key (byte "\"cX\""))
                                   (= key (byte "\"tX\"")))
                               (note "contract/transfer admin")
+                              (assert (= (app-local-get 0 contract-admin) 1))
                               (app-local-put-acct! target key (btoi value))
-                              (= (app-local-gets 0 contract-admin) 1)]
+                              1]
 
                              [(= key (byte "\"mn\""))
                               (note "mint")
-                              (app-local-put-acct! target balance (+ (app-local-gets-acct target balance) (btoi value)))
-                              (app-global-put! reserve-supply (- (app-global-gets reserve-supply) (btoi value)))
-                              (= (app-local-gets 0 contract-admin) 1)]
+                              (app-local-put-acct! target balance (+ (app-local-get-acct target balance) (btoi value)))
+                              (app-global-put! reserve-supply (- (app-global-get reserve-supply) (btoi value)))
+                              (= (app-local-get 0 contract-admin) 1)]
 
                              [(= key (byte "\"br\""))
                               (note "burn")
-                              (app-local-put-acct! target balance (- (app-local-gets-acct target balance) (btoi value)))
-                              (app-global-put! reserve-supply (+ (app-global-gets reserve-supply) (btoi value)))
-                              (= (app-local-gets 0 contract-admin) 1)]
+                              (app-local-put-acct! target balance (- (app-local-get-acct target balance) (btoi value)))
+                              (app-global-put! reserve-supply (+ (app-global-get reserve-supply) (btoi value)))
+                              (= (app-local-get 0 contract-admin) 1)]
 
                              [else
                               (note "set max balance, lock until, transfer group, freeze")
                               (app-local-put-acct! target key (btoi value))
                               (or (and (= key (byte "\"fz\""))
-                                       (or (= (app-local-gets 0 contract-admin) 1)
-                                           (= (app-local-gets 0 transfer-admin) 1)))
-                                  (and (= (app-local-gets 0 transfer-admin) 1)
+                                       (or (= (app-local-get 0 contract-admin) 1)
+                                           (= (app-local-get 0 transfer-admin) 1)))
+                                  (and (= (app-local-get 0 transfer-admin) 1)
                                        (or (= key (byte "\"mb\""))
                                            (= key (byte "\"tl\""))
                                            (= key (byte "\"tg\"")))))]))))]))
 
     (onclear (app-global-put! reserve-supply
-                              (+ (app-global-gets reserve-supply)
-                                 (app-local-gets 0 balance))))))
+                              (+ (app-global-get reserve-supply)
+                                 (app-local-get 0 balance))))))

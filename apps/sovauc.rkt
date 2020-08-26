@@ -126,7 +126,7 @@
        (note "128-bit div")
        (store2! ,dividend-low ,dividend-high (mulw ,dividend1 ,dividend2))
        (store2! ,product-low ,product-high (mulw ,divisor ,quotient))
-       (store2! ,final-low ,carry (plusw ,remainder (load ,product-low)))
+       (store2! ,final-low ,carry (addw ,remainder (load ,product-low)))
        (and (= (load ,dividend-high) (+ (load ,product-high) (load ,carry)))
             (= (load ,dividend-low) (load ,final-low))))))
 
